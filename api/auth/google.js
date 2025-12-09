@@ -11,7 +11,7 @@ export default async function handler(req) {
 
   // Google OAuth URL
   const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-    `client_id=${process.env.GOOGLE_CLIENT_ID || '842356384486-t9mhke9r4mvcvfo871udk6trp5r7coup.apps.googleusercontent.com'}&` +
+    `client_id=${process.env.GOOGLE_CLIENT_ID}&` +
     `redirect_uri=${encodeURIComponent(redirectUrl)}&` +
     `response_type=code&` +
     `scope=openid email profile&` +

@@ -25,8 +25,8 @@ export default async function handler(req) {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         code,
-        client_id: process.env.GOOGLE_CLIENT_ID || '842356384486-t9mhke9r4mvcvfo871udk6trp5r7coup.apps.googleusercontent.com',
-        client_secret: process.env.GOOGLE_CLIENT_SECRET || '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',
+        client_id: process.env.GOOGLE_CLIENT_ID,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET,
         redirect_uri: `${req.headers.origin || 'http://localhost:5174'}/api/auth/google/callback`,
         grant_type: 'authorization_code',
       }),
