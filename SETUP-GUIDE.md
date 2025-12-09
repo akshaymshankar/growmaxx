@@ -33,8 +33,8 @@ Complete setup instructions for deploying GrowMaxx with real authentication and 
 2. Find **Google** and click to expand
 3. Toggle **Enable Sign in with Google** to ON
 4. Enter:
-   - **Client ID:** `842356384486-t9mhke9r4mvcvfo871udk6trp5r7coup.apps.googleusercontent.com`
-   - **Client Secret:** `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`
+   - **Client ID:** `[Your Google Client ID]`
+   - **Client Secret:** `[Your Google Client Secret]`
 5. Copy the **Redirect URL** shown (something like `https://qrwsqjztooxeziqfrmjx.supabase.co/auth/v1/callback`)
 6. Click **Save**
 
@@ -89,7 +89,7 @@ VITE_APP_URL=https://yourdomain.com
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here
 RAZORPAY_KEY_ID=rzp_live_RpPJAYduTK0PS7
 RAZORPAY_KEY_SECRET=7CjgSBmlW2rhdtWKrcJ4fH75
-GOOGLE_CLIENT_SECRET=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
+GOOGLE_CLIENT_SECRET=[Your Google Client Secret]
 JWT_SECRET=generate_a_random_string_here
 ```
 

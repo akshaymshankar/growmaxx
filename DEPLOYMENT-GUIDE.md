@@ -24,7 +24,7 @@ Make sure your `.env.local` has all variables (for reference):
 VITE_SUPABASE_URL=https://qrwsqjztooxeziqfrmjx.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 VITE_RAZORPAY_KEY_ID=rzp_live_RpPJAYduTK0PS7
-VITE_GOOGLE_CLIENT_ID=842356384486-t9mhke9r4mvcvfo871udk6trp5r7coup.apps.googleusercontent.com
+VITE_GOOGLE_CLIENT_ID=[Your Google Client ID]
 VITE_APP_URL=http://localhost:5174
 ```
 
@@ -123,13 +123,13 @@ VITE_APP_URL=http://localhost:5174
 | `VITE_SUPABASE_URL` | `https://qrwsqjztooxeziqfrmjx.supabase.co` | Production, Preview, Development |
 | `VITE_SUPABASE_ANON_KEY` | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` | Production, Preview, Development |
 | `VITE_RAZORPAY_KEY_ID` | `rzp_live_RpPJAYduTK0PS7` | Production, Preview, Development |
-| `VITE_GOOGLE_CLIENT_ID` | `842356384486-t9mhke9r4mvcvfo871udk6trp5r7coup.apps.googleusercontent.com` | Production, Preview, Development |
+| `VITE_GOOGLE_CLIENT_ID` | `[Your Google Client ID]` | Production, Preview, Development |
 | `VITE_APP_URL` | `https://your-app.vercel.app` | Production |
 | `SUPABASE_URL` | `https://qrwsqjztooxeziqfrmjx.supabase.co` | Production, Preview, Development |
 | `SUPABASE_SERVICE_ROLE_KEY` | `[Your service role key]` | Production, Preview, Development |
 | `RAZORPAY_KEY_ID` | `rzp_live_RpPJAYduTK0PS7` | Production, Preview, Development |
 | `RAZORPAY_KEY_SECRET` | `7CjgSBmlW2rhdtWKrcJ4fH75` | Production, Preview, Development |
-| `GOOGLE_CLIENT_SECRET` | `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` | Production, Preview, Development |
+| `GOOGLE_CLIENT_SECRET` | `[Your Google Client Secret]` | Production, Preview, Development |
 
 **⚠️ Important:**
 - `VITE_*` variables are exposed to frontend

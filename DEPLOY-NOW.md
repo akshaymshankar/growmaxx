@@ -41,7 +41,7 @@ Add these **10 variables**:
 VITE_SUPABASE_URL=https://qrwsqjztooxeziqfrmjx.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFyd3Nxanp0b294ZXppcWZybWp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyNTY2MTEsImV4cCI6MjA4MDgzMjYxMX0.woX1RFTOnSN-JRdObGWsrvhCpLBNRcA4m7TTLUdvy0A
 VITE_RAZORPAY_KEY_ID=rzp_live_RpPJAYduTK0PS7
-VITE_GOOGLE_CLIENT_ID=842356384486-t9mhke9r4mvcvfo871udk6trp5r7coup.apps.googleusercontent.com
+VITE_GOOGLE_CLIENT_ID=[Your Google Client ID]
 VITE_APP_URL=https://your-app-name.vercel.app
 ```
 
@@ -51,7 +51,7 @@ SUPABASE_URL=https://qrwsqjztooxeziqfrmjx.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=[Get from Supabase Dashboard → Settings → API → service_role key]
 RAZORPAY_KEY_ID=rzp_live_RpPJAYduTK0PS7
 RAZORPAY_KEY_SECRET=7CjgSBmlW2rhdtWKrcJ4fH75
-GOOGLE_CLIENT_SECRET=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
+GOOGLE_CLIENT_SECRET=[Your Google Client Secret]
 ```
 
 **⚠️ Important:**

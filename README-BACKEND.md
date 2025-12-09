@@ -38,8 +38,8 @@
 1. Supabase Dashboard → **Authentication** → **Providers**
 2. Enable **Google**
 3. Add:
-   - Client ID: `842356384486-t9mhke9r4mvcvfo871udk6trp5r7coup.apps.googleusercontent.com`
-   - Client Secret: `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`
+   - Client ID: `[Your Google Client ID]`
+   - Client Secret: `[Your Google Client Secret]`
 4. Copy the **Redirect URL** shown
 5. Add it to Google Console → OAuth Client → Authorized redirect URIs
 
