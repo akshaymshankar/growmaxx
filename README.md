@@ -1,18 +1,127 @@
-# React + Vite
+# 🚀 GrowMaxx - Complete Deployment Ready
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Professional landing page and SaaS platform for local businesses in Tamil Nadu.
 
-Currently, two official plugins are available:
+## ✨ Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- ✅ Real authentication (Email + Google OAuth) with Supabase
+- ✅ Payment integration with Razorpay
+- ✅ User dashboard with billing management
+- ✅ Plan selection and subscription management
+- ✅ Professional dark theme UI with animations
+- ✅ Responsive design (mobile-first)
 
-## React Compiler
+## 🏃 Quick Start (Local Development)
 
-The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
+### Prerequisites
+- Node.js 18+
+- Supabase account
+- Razorpay account
 
-Note: This will impact Vite dev & build performances.
+### Setup
 
-## Expanding the ESLint configuration
+1. **Install dependencies:**
+   ```bash
+   npm install
+   ```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+2. **Set up environment variables:**
+   Create `.env.local`:
+   ```env
+   VITE_SUPABASE_URL=https://qrwsqjztooxeziqfrmjx.supabase.co
+   VITE_SUPABASE_ANON_KEY=your_anon_key
+   VITE_RAZORPAY_KEY_ID=rzp_live_RpPJAYduTK0PS7
+   VITE_GOOGLE_CLIENT_ID=your_google_client_id
+   VITE_APP_URL=http://localhost:5174
+   ```
+
+3. **Run database schema:**
+   - Go to Supabase SQL Editor
+   - Run `supabase-schema.sql`
+
+4. **Start development:**
+   ```bash
+   # Option 1: Run everything together
+   npm run dev:all
+   
+   # Option 2: Run separately
+   npm run server  # Terminal 1
+   npm run dev      # Terminal 2
+   ```
+
+5. **Open browser:**
+   - Frontend: http://localhost:5174
+   - API: http://localhost:3000/api/health
+
+## 🚀 Deployment
+
+See **[DEPLOYMENT-GUIDE.md](./DEPLOYMENT-GUIDE.md)** for complete deployment instructions.
+
+### Quick Deploy to Vercel:
+
+```bash
+# Install Vercel CLI
+npm install -g vercel
+
+# Login
+vercel login
+
+# Deploy
+vercel --prod
+```
+
+## 📁 Project Structure
+
+```
+nova-local/
+├── api/                    # Vercel serverless functions
+│   ├── create-payment.js   # Razorpay order creation
+│   └── verify-payment.js  # Payment verification
+├── src/
+│   ├── components/         # React components
+│   ├── pages/             # Page components
+│   ├── context/           # React context (Auth)
+│   └── lib/               # Utilities (Supabase client)
+├── supabase-schema.sql    # Database schema
+├── vercel.json            # Vercel configuration
+└── package.json
+```
+
+## 🔑 Environment Variables
+
+### Frontend (VITE_*)
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `VITE_RAZORPAY_KEY_ID`
+- `VITE_GOOGLE_CLIENT_ID`
+- `VITE_APP_URL`
+
+### Backend (Server-only)
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `RAZORPAY_KEY_ID`
+- `RAZORPAY_KEY_SECRET`
+- `GOOGLE_CLIENT_SECRET`
+
+## 📚 Documentation
+
+- **[DEPLOYMENT-GUIDE.md](./DEPLOYMENT-GUIDE.md)** - Complete deployment guide
+- **[SETUP-GUIDE.md](./SETUP-GUIDE.md)** - Initial setup instructions
+- **[QUICK-START.md](./QUICK-START.md)** - Quick troubleshooting
+
+## 🛠️ Tech Stack
+
+- **Frontend:** React 19 + Vite + Tailwind CSS + Framer Motion
+- **Backend:** Vercel Serverless Functions
+- **Database:** Supabase (PostgreSQL)
+- **Auth:** Supabase Auth + Google OAuth
+- **Payments:** Razorpay
+- **Deployment:** Vercel
+
+## 📝 License
+
+ISC
+
+---
+
+**Built with ❤️ for local businesses in Tamil Nadu**

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
+import { Link } from "react-router-dom";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    GROWMAXX LANDING PAGE
@@ -157,9 +158,9 @@ function Header() {
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.5 }}
         >
-          <a href="#contact" className="btn-primary">
-            Get Free Demo
-          </a>
+          <Link to="/signin" className="btn-primary">
+            Get Started
+          </Link>
         </motion.div>
         
         {/* Mobile Menu Button */}
@@ -193,9 +194,9 @@ function Header() {
                   {item}
                 </a>
               ))}
-              <a href="#contact" className="btn-primary mt-4 text-center">
-                Get Free Demo
-              </a>
+              <Link to="/signin" className="btn-primary mt-4 text-center">
+                Get Started
+              </Link>
             </div>
           </motion.div>
         )}
@@ -308,14 +309,14 @@ function HeroSection() {
               transition={{ duration: 0.6, delay: 0.3 }}
               className="flex flex-wrap gap-4"
             >
-              <a href="#contact" className="btn-primary group">
+              <Link to="/signin" className="btn-primary group">
                 <span className="relative z-10 flex items-center gap-2">
-                  Start Free Demo
+                  Get Started
                   <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                   </svg>
                 </span>
-              </a>
+              </Link>
               <a 
                 href={`https://wa.me/${CONTACT.whatsapp}?text=${encodeURIComponent("Hi! I want to know more about GrowMaxx")}`}
                 target="_blank"
@@ -702,9 +703,9 @@ function HowItWorks() {
           viewport={{ once: true }}
           className="text-center mt-14"
         >
-          <a href="#contact" className="btn-primary">
+          <Link to="/signin" className="btn-primary">
             Start Your Free Demo
-          </a>
+          </Link>
         </motion.div>
       </div>
     </section>
@@ -839,15 +840,6 @@ function PricingSection() {
 }
 
 function PricingCard({ name, price, period, description, features, cta, paymentLink, popular }) {
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  
-  const handlePayment = () => {
-    // For now, open WhatsApp to discuss payment
-    // Once you set up Razorpay, replace with actual payment link
-    const message = `Hi! I'm interested in the ${name} plan (₹${price} ${period}). Please help me get started.`;
-    window.open(`https://wa.me/${CONTACT.whatsapp}?text=${encodeURIComponent(message)}`, '_blank');
-  };
-  
   return (
     <div className={`relative h-full ${popular ? 'z-10' : ''}`}>
       {/* Popular Badge */}
@@ -887,8 +879,8 @@ function PricingCard({ name, price, period, description, features, cta, paymentL
         </ul>
         
         {/* CTA */}
-        <button 
-          onClick={handlePayment}
+        <Link 
+          to="/signin"
           className={`block w-full py-3.5 text-center rounded-xl font-semibold text-sm transition-all duration-300 ${
             popular 
               ? 'bg-lime-400 text-[#050505] hover:bg-lime-500' 
@@ -896,7 +888,7 @@ function PricingCard({ name, price, period, description, features, cta, paymentL
           }`}
         >
           {cta}
-        </button>
+        </Link>
       </div>
     </div>
   );
