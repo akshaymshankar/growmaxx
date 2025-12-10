@@ -2,8 +2,6 @@
 // Vercel Serverless Function
 // POST /api/create-payment
 
-import Razorpay from 'razorpay';
-
 export default async function handler(req) {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -69,14 +67,9 @@ export default async function handler(req) {
       };
     }
 
-    // Initialize Razorpay
-    const razorpay = new Razorpay({
-      key_id: process.env.RAZORPAY_KEY_ID,
-      key_secret: process.env.RAZORPAY_KEY_SECRET,
-    });
-
-    // Create Razorpay order
-    const options = {
+    // Create Razorpay order using direct API call (not SDK)
+    // This gives us better timeout control
+    const orderData = {
       amount: Math.round(amount * 100), // Convert to paise
       currency,
       receipt: `order_${Date.now()}_${user_id.substring(0, 8)}`,
@@ -89,47 +82,69 @@ export default async function handler(req) {
     };
 
     console.log('Creating Razorpay order with options:', {
-      amount: options.amount,
-      currency: options.currency,
-      receipt: options.receipt
+      amount: orderData.amount,
+      currency: orderData.currency,
+      receipt: orderData.receipt
     });
 
-    // Add timeout to Razorpay API call (10 seconds)
-    // This prevents the function from hanging for 300 seconds
-    const createOrderWithTimeout = () => {
-      return Promise.race([
-        razorpay.orders.create(options),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Razorpay API timeout after 10 seconds')), 10000)
-        )
-      ]);
-    };
+    // Use fetch directly with timeout (8 seconds)
+    // This prevents the 300-second Vercel timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-    const order = await createOrderWithTimeout();
+    try {
+      // Create Basic Auth header
+      const auth = Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString('base64');
 
-    console.log('✅ Razorpay order created successfully:', order.id);
+      const response = await fetch('https://api.razorpay.com/v1/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Basic ${auth}`,
+        },
+        body: JSON.stringify(orderData),
+        signal: controller.signal,
+      });
 
-    return {
-      statusCode: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      body: JSON.stringify({
-        success: true,
-        order_id: order.id,
-        amount: order.amount,
-        currency: order.currency,
-        receipt: order.receipt,
-      }),
-    };
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Razorpay API error:', response.status, errorText);
+        throw new Error(`Razorpay API error: ${response.status} - ${errorText}`);
+      }
+
+      const order = await response.json();
+      console.log('✅ Razorpay order created successfully:', order.id);
+
+      return {
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({
+          success: true,
+          order_id: order.id,
+          amount: order.amount,
+          currency: order.currency,
+          receipt: order.receipt,
+        }),
+      };
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === 'AbortError') {
+        console.error('❌ Razorpay API timeout after 8 seconds');
+        throw new Error('Razorpay API timeout - please try again');
+      }
+      throw fetchError;
+    }
   } catch (error) {
-    console.error('❌ Razorpay error:', error);
+    console.error('❌ Payment creation error:', error);
     console.error('Error details:', {
       message: error.message,
       stack: error.stack,
       name: error.name,
-      code: error.code
     });
     
     return {
