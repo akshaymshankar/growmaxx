@@ -88,7 +88,7 @@ RAZORPAY_KEY_ID=rzp_live_RpPJAYduTK0PS7
 RAZORPAY_KEY_SECRET=7CjgSBmlW2rhdtWKrcJ4fH75
 
 # Google OAuth
-VITE_GOOGLE_CLIENT_ID=842356384486-t9mhke9r4mvcvfo871udk6trp5r7coup.apps.googleusercontent.com
+VITE_GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 
 # App URL (for local)
 VITE_APP_URL=http://localhost:5173

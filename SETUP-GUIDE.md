@@ -65,7 +65,7 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 VITE_RAZORPAY_KEY_ID=rzp_live_RpPJAYduTK0PS7
 
 # Google OAuth (Frontend - Client ID only)
-VITE_GOOGLE_CLIENT_ID=842356384486-t9mhke9r4mvcvfo871udk6trp5r7coup.apps.googleusercontent.com
+VITE_GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 
 # App URL
 VITE_APP_URL=http://localhost:5174
@@ -82,7 +82,7 @@ VITE_APP_URL=http://localhost:5174
 VITE_SUPABASE_URL=https://qrwsqjztooxeziqfrmjx.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 VITE_RAZORPAY_KEY_ID=rzp_live_RpPJAYduTK0PS7
-VITE_GOOGLE_CLIENT_ID=842356384486-t9mhke9r4mvcvfo871udk6trp5r7coup.apps.googleusercontent.com
+VITE_GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 VITE_APP_URL=https://yourdomain.com
 
 # Backend only (Server-side)
