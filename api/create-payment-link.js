@@ -152,11 +152,11 @@ export default async function handler(req) {
           reject(new Error(`Network error: ${error.message}`));
         });
 
-        // Timeout after 10 seconds
+        // Timeout after 8 seconds (faster for Vercel)
         timeoutId = setTimeout(() => {
           if (resolved) return;
           resolved = true;
-          console.error('❌ Forcing timeout after 10 seconds');
+          console.error('❌ Forcing timeout after 8 seconds');
           try {
             req.destroy();
             req.abort();
@@ -166,8 +166,8 @@ export default async function handler(req) {
           } catch (e) {
             console.error('Error destroying request:', e);
           }
-          reject(new Error('Razorpay API timeout after 10 seconds'));
-        }, 10000);
+          reject(new Error('Razorpay API timeout after 8 seconds'));
+        }, 8000);
 
         try {
           req.setTimeout(10000, () => {

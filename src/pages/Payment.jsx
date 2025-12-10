@@ -174,28 +174,101 @@ export default function Payment() {
         // Continue anyway - we'll handle it in webhook
       }
 
-      // Use direct razorpay.me link - NO API CALLS NEEDED!
-      // This avoids all Vercel timeout and API issues
-      const baseLink = 'https://razorpay.me/@gandhiraajanakshaymuthushanka';
+      // Create Razorpay Payment Link via API to preload amount
+      // razorpay.me/@username doesn't support amount in URL, so we use Payment Links API
       const amount = getTotal();
       
-      // Try adding amount to path (some razorpay.me links support this)
-      // If it doesn't work, user will enter amount manually
-      const paymentLink = `${baseLink}/${amount}`;
+      console.log('Creating payment link with amount:', amount);
       
-      console.log('Redirecting to Razorpay payment link:', paymentLink);
-      console.log('Expected amount:', amount);
-      console.log('Payment intent ID for webhook matching:', paymentData?.id);
+      // Call API to create payment link with preloaded amount
+      const apiUrl = import.meta.env.PROD 
+        ? `${window.location.origin}/api/create-payment-link`
+        : '/api/create-payment-link';
       
-      // Store payment intent ID and expected amount for webhook matching
-      if (paymentData?.id) {
-        localStorage.setItem('pending_payment_id', paymentData.id);
-        localStorage.setItem('pending_plan', JSON.stringify(selectedPlan));
-        localStorage.setItem('expected_amount', (amount * 100).toString()); // Store in paise
-      }
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+      
+      try {
+        const linkResponse = await fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            amount: amount,
+            currency: 'INR',
+            plan_id: selectedPlan.id,
+            plan_name: selectedPlan.name,
+            billing_cycle: selectedPlan.billingCycle,
+            user_id: user.id,
+            user_email: user.email,
+            user_name: profile?.name || profile?.full_name || '',
+            user_phone: profile?.phone || '',
+          }),
+          signal: controller.signal,
+        });
+        
+        clearTimeout(timeoutId);
 
-      // Redirect directly to Razorpay payment link - NO API CALLS!
-      window.location.href = paymentLink;
+        if (!linkResponse.ok) {
+          const errorText = await linkResponse.text();
+          console.error('Payment link creation failed:', errorText);
+          // Fallback to base razorpay.me link if API fails
+          console.warn('API failed, using fallback razorpay.me link');
+          const fallbackLink = 'https://razorpay.me/@gandhiraajanakshaymuthushanka/';
+          if (paymentData?.id) {
+            localStorage.setItem('pending_payment_id', paymentData.id);
+            localStorage.setItem('pending_plan', JSON.stringify(selectedPlan));
+            localStorage.setItem('expected_amount', (amount * 100).toString());
+          }
+          window.location.href = fallbackLink;
+          return;
+        }
+
+        const linkData = await linkResponse.json();
+        
+        if (!linkData || !linkData.payment_link_url) {
+          console.error('Invalid payment link response:', linkData);
+          // Fallback to base razorpay.me link
+          console.warn('Invalid response, using fallback razorpay.me link');
+          const fallbackLink = 'https://razorpay.me/@gandhiraajanakshaymuthushanka/';
+          if (paymentData?.id) {
+            localStorage.setItem('pending_payment_id', paymentData.id);
+            localStorage.setItem('pending_plan', JSON.stringify(selectedPlan));
+            localStorage.setItem('expected_amount', (amount * 100).toString());
+          }
+          window.location.href = fallbackLink;
+          return;
+        }
+
+        console.log('✅ Payment link created:', linkData.payment_link_url);
+        console.log('Payment intent ID for webhook matching:', paymentData?.id);
+        
+        // Store payment intent ID in localStorage for webhook matching
+        if (paymentData?.id) {
+          localStorage.setItem('pending_payment_id', paymentData.id);
+          localStorage.setItem('pending_plan', JSON.stringify(selectedPlan));
+        }
+
+        // Redirect to Razorpay payment link with preloaded amount
+        window.location.href = linkData.payment_link_url;
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        if (fetchError.name === 'AbortError') {
+          console.error('Payment link API timed out, using fallback');
+        } else {
+          console.error('Payment link API error:', fetchError);
+        }
+        // Fallback to base razorpay.me link if API fails
+        const fallbackLink = 'https://razorpay.me/@gandhiraajanakshaymuthushanka/';
+        if (paymentData?.id) {
+          localStorage.setItem('pending_payment_id', paymentData.id);
+          localStorage.setItem('pending_plan', JSON.stringify(selectedPlan));
+          localStorage.setItem('expected_amount', (amount * 100).toString());
+        }
+        window.location.href = fallbackLink;
+      }
       
     } catch (err) {
       console.error('Payment redirect error:', err);
