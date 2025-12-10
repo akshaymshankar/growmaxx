@@ -33,7 +33,9 @@ export default async function handler(req) {
   try {
     // Check if Razorpay credentials are configured
     if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-      console.error('Razorpay credentials not configured');
+      console.error('❌ Razorpay credentials not configured');
+      console.error('RAZORPAY_KEY_ID:', process.env.RAZORPAY_KEY_ID ? '✅ SET' : '❌ MISSING');
+      console.error('RAZORPAY_KEY_SECRET:', process.env.RAZORPAY_KEY_SECRET ? '✅ SET' : '❌ MISSING');
       return {
         statusCode: 500,
         headers: {
@@ -42,11 +44,12 @@ export default async function handler(req) {
         },
         body: JSON.stringify({ 
           error: 'Payment gateway not configured',
-          message: 'RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET must be set in environment variables'
+          message: 'RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET must be set in Vercel environment variables'
         }),
       };
     }
 
+    // Parse request body
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
     const { amount, currency = 'INR', plan_id, plan_name, billing_cycle, user_id } = body;
 
@@ -85,7 +88,15 @@ export default async function handler(req) {
       },
     };
 
+    console.log('Creating Razorpay order with options:', {
+      amount: options.amount,
+      currency: options.currency,
+      receipt: options.receipt
+    });
+
     const order = await razorpay.orders.create(options);
+
+    console.log('✅ Razorpay order created successfully:', order.id);
 
     return {
       statusCode: 200,
@@ -102,7 +113,14 @@ export default async function handler(req) {
       }),
     };
   } catch (error) {
-    console.error('Razorpay error:', error);
+    console.error('❌ Razorpay error:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      code: error.code
+    });
+    
     return {
       statusCode: 500,
       headers: {
@@ -111,7 +129,7 @@ export default async function handler(req) {
       },
       body: JSON.stringify({
         error: 'Payment creation failed',
-        message: error.message,
+        message: error.message || 'Unknown error occurred',
       }),
     };
   }

@@ -160,6 +160,11 @@ export default function Payment() {
       try {
         // Try backend API first (for production)
         console.log('Creating payment order...', { amount: getTotal(), plan: selectedPlan.name });
+        console.log('Environment:', { 
+          PROD: import.meta.env.PROD, 
+          MODE: import.meta.env.MODE,
+          origin: window.location.origin 
+        });
         
         // Use absolute URL in production, relative in development
         const apiUrl = import.meta.env.PROD 
@@ -167,7 +172,16 @@ export default function Payment() {
           : '/api/create-payment';
         
         console.log('Calling API:', apiUrl);
+        console.log('Request payload:', {
+          amount: getTotal(),
+          currency: 'INR',
+          plan_id: selectedPlan.id,
+          plan_name: selectedPlan.name,
+          billing_cycle: selectedPlan.billingCycle,
+          user_id: user.id,
+        });
         
+        const fetchStartTime = Date.now();
         const orderResponse = await fetch(apiUrl, {
           method: 'POST',
           headers: {
@@ -183,7 +197,10 @@ export default function Payment() {
           }),
         });
 
+        const fetchTime = Date.now() - fetchStartTime;
+        console.log(`API call took ${fetchTime}ms`);
         console.log('Order response status:', orderResponse.status);
+        console.log('Order response statusText:', orderResponse.statusText);
         console.log('Order response headers:', Object.fromEntries(orderResponse.headers.entries()));
 
         if (!orderResponse.ok) {
@@ -200,6 +217,13 @@ export default function Payment() {
             console.error('Parsed error:', errorData);
           } catch {
             errorMessage += errorText || 'Please check your connection and try again.';
+          }
+          
+          // Show specific error for 500 (likely missing env vars)
+          if (orderResponse.status === 500) {
+            errorMessage = 'Payment server error. Please check that Razorpay credentials are configured in Vercel.';
+          } else if (orderResponse.status === 404) {
+            errorMessage = 'Payment API not found. Please check deployment.';
           }
           
           throw new Error(errorMessage);
@@ -219,7 +243,19 @@ export default function Payment() {
       } catch (apiError) {
         // Backend not available or error
         console.error('Payment API error:', apiError);
+        console.error('Error name:', apiError.name);
+        console.error('Error message:', apiError.message);
         console.error('Error stack:', apiError.stack);
+        
+        // Check if it's a network error
+        if (apiError.name === 'TypeError' && apiError.message.includes('fetch')) {
+          console.error('Network error - API endpoint may not be accessible');
+          clearTimeout(timeoutId);
+          setError('Cannot connect to payment server. Please check your internet connection and try again.');
+          setIsProcessing(false);
+          return;
+        }
+        
         clearTimeout(timeoutId);
         setError(apiError.message || 'Payment server error. Please try again or contact support.');
         setIsProcessing(false);
