@@ -183,11 +183,11 @@ export default function Payment() {
         
         const fetchStartTime = Date.now();
         
-        // Add timeout to fetch (15 seconds)
+        // Add timeout to fetch (25 seconds - longer than backend timeout)
         const fetchController = new AbortController();
         const fetchTimeout = setTimeout(() => {
           fetchController.abort();
-        }, 15000); // 15 second timeout
+        }, 25000); // 25 second timeout (backend has 15s + retries)
         
         let orderResponse;
         try {

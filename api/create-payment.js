@@ -154,8 +154,10 @@ export default async function handler(req) {
         const order = await makeRequest();
         
         console.log(`✅ Razorpay order created successfully (attempt ${attempt}):`, order.id);
+        console.log('Order details:', { id: order.id, amount: order.amount, currency: order.currency });
 
-        return {
+        // Return immediately after order creation
+        const response = {
           statusCode: 200,
           headers: {
             'Content-Type': 'application/json',
@@ -169,6 +171,9 @@ export default async function handler(req) {
             receipt: order.receipt,
           }),
         };
+        
+        console.log('Returning response:', response.statusCode);
+        return response;
       } catch (error) {
         console.error(`❌ Error on attempt ${attempt}:`, error.message);
         lastError = error;
