@@ -108,6 +108,8 @@ export default async function handler(req) {
           timeout: 15000, // 15 second timeout
         };
 
+        let resolved = false;
+        
         const req = https.request(options, (res) => {
           let data = '';
 
@@ -116,6 +118,9 @@ export default async function handler(req) {
           });
 
           res.on('end', () => {
+            if (resolved) return;
+            resolved = true;
+            
             if (res.statusCode >= 200 && res.statusCode < 300) {
               try {
                 const order = JSON.parse(data);
@@ -130,12 +135,20 @@ export default async function handler(req) {
         });
 
         req.on('error', (error) => {
+          if (resolved) return;
+          resolved = true;
           reject(new Error(`Network error: ${error.message}`));
         });
 
         req.on('timeout', () => {
+          if (resolved) return;
+          resolved = true;
           req.destroy();
           reject(new Error('Request timeout after 15 seconds'));
+        });
+
+        req.on('close', () => {
+          // Ensure request is fully closed
         });
 
         req.write(postData);
@@ -156,24 +169,25 @@ export default async function handler(req) {
         console.log(`✅ Razorpay order created successfully (attempt ${attempt}):`, order.id);
         console.log('Order details:', { id: order.id, amount: order.amount, currency: order.currency });
 
-        // Return immediately after order creation
-        const response = {
+        // Return immediately after order creation - ensure clean return
+        const responseBody = {
+          success: true,
+          order_id: order.id,
+          amount: order.amount,
+          currency: order.currency,
+          receipt: order.receipt,
+        };
+        
+        console.log('Returning response with order_id:', order.id);
+        
+        return {
           statusCode: 200,
           headers: {
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*',
           },
-          body: JSON.stringify({
-            success: true,
-            order_id: order.id,
-            amount: order.amount,
-            currency: order.currency,
-            receipt: order.receipt,
-          }),
+          body: JSON.stringify(responseBody),
         };
-        
-        console.log('Returning response:', response.statusCode);
-        return response;
       } catch (error) {
         console.error(`❌ Error on attempt ${attempt}:`, error.message);
         lastError = error;
