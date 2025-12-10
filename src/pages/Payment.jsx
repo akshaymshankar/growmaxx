@@ -182,23 +182,42 @@ export default function Payment() {
         });
         
         const fetchStartTime = Date.now();
-        const orderResponse = await fetch(apiUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            amount: getTotal(),
-            currency: 'INR',
-            plan_id: selectedPlan.id,
-            plan_name: selectedPlan.name,
-            billing_cycle: selectedPlan.billingCycle,
-            user_id: user.id,
-          }),
-        });
+        
+        // Add timeout to fetch (15 seconds)
+        const fetchController = new AbortController();
+        const fetchTimeout = setTimeout(() => {
+          fetchController.abort();
+        }, 15000); // 15 second timeout
+        
+        let orderResponse;
+        try {
+          orderResponse = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              amount: getTotal(),
+              currency: 'INR',
+              plan_id: selectedPlan.id,
+              plan_name: selectedPlan.name,
+              billing_cycle: selectedPlan.billingCycle,
+              user_id: user.id,
+            }),
+            signal: fetchController.signal,
+          });
+          clearTimeout(fetchTimeout);
+        } catch (fetchError) {
+          clearTimeout(fetchTimeout);
+          if (fetchError.name === 'AbortError') {
+            console.error('❌ API call timed out after 15 seconds');
+            throw new Error('Payment server is taking too long to respond. Please try again.');
+          }
+          throw fetchError;
+        }
 
         const fetchTime = Date.now() - fetchStartTime;
-        console.log(`API call took ${fetchTime}ms`);
+        console.log(`✅ API call completed in ${fetchTime}ms`);
         console.log('Order response status:', orderResponse.status);
         console.log('Order response statusText:', orderResponse.statusText);
         console.log('Order response headers:', Object.fromEntries(orderResponse.headers.entries()));
@@ -242,16 +261,25 @@ export default function Payment() {
         console.log('Using order:', { orderId, orderAmount });
       } catch (apiError) {
         // Backend not available or error
-        console.error('Payment API error:', apiError);
+        console.error('❌ Payment API error:', apiError);
         console.error('Error name:', apiError.name);
         console.error('Error message:', apiError.message);
         console.error('Error stack:', apiError.stack);
         
         // Check if it's a network error
-        if (apiError.name === 'TypeError' && apiError.message.includes('fetch')) {
-          console.error('Network error - API endpoint may not be accessible');
+        if (apiError.name === 'TypeError' && (apiError.message.includes('fetch') || apiError.message.includes('Failed to fetch'))) {
+          console.error('❌ Network error - API endpoint may not be accessible');
           clearTimeout(timeoutId);
-          setError('Cannot connect to payment server. Please check your internet connection and try again.');
+          setError('Cannot connect to payment server. The API endpoint may not be deployed. Please check Vercel deployment.');
+          setIsProcessing(false);
+          return;
+        }
+        
+        // Check if it's a timeout
+        if (apiError.message.includes('too long')) {
+          console.error('❌ API timeout');
+          clearTimeout(timeoutId);
+          setError('Payment server is not responding. Please check Vercel function logs and try again.');
           setIsProcessing(false);
           return;
         }
