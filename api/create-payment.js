@@ -87,58 +87,96 @@ export default async function handler(req) {
       receipt: orderData.receipt
     });
 
-    // Use fetch directly with timeout (8 seconds)
-    // This prevents the 300-second Vercel timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    // Use fetch directly with timeout (20 seconds) and retry logic
+    // Razorpay API can be slow sometimes, so we give it more time and retry on failure
+    const maxRetries = 2;
+    let lastError = null;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000); // 20 seconds
+      
+      try {
+        console.log(`Attempt ${attempt}/${maxRetries}: Creating Razorpay order...`);
+        
+        // Create Basic Auth header
+        const auth = Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString('base64');
 
-    try {
-      // Create Basic Auth header
-      const auth = Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString('base64');
+        const response = await fetch('https://api.razorpay.com/v1/orders', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Basic ${auth}`,
+          },
+          body: JSON.stringify(orderData),
+          signal: controller.signal,
+        });
 
-      const response = await fetch('https://api.razorpay.com/v1/orders', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Basic ${auth}`,
-        },
-        body: JSON.stringify(orderData),
-        signal: controller.signal,
-      });
+        clearTimeout(timeoutId);
 
-      clearTimeout(timeoutId);
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`❌ Razorpay API error (attempt ${attempt}):`, response.status, errorText);
+          
+          // Don't retry on 4xx errors (client errors - wrong keys, bad request, etc.)
+          if (response.status >= 400 && response.status < 500) {
+            throw new Error(`Razorpay API error: ${response.status} - ${errorText}`);
+          }
+          
+          // Retry on 5xx errors (server errors - Razorpay's fault)
+          lastError = new Error(`Razorpay API error: ${response.status} - ${errorText}`);
+          if (attempt < maxRetries) {
+            console.log(`Retrying in 1 second...`);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            continue;
+          }
+          throw lastError;
+        }
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ Razorpay API error:', response.status, errorText);
-        throw new Error(`Razorpay API error: ${response.status} - ${errorText}`);
+        const order = await response.json();
+        console.log(`✅ Razorpay order created successfully (attempt ${attempt}):`, order.id);
+
+        return {
+          statusCode: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+          body: JSON.stringify({
+            success: true,
+            order_id: order.id,
+            amount: order.amount,
+            currency: order.currency,
+            receipt: order.receipt,
+          }),
+        };
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        
+        if (fetchError.name === 'AbortError') {
+          console.error(`❌ Razorpay API timeout after 20 seconds (attempt ${attempt})`);
+          lastError = new Error('Razorpay API timeout - please try again');
+          
+          // Retry on timeout
+          if (attempt < maxRetries) {
+            console.log(`Retrying in 1 second...`);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            continue;
+          }
+        } else {
+          lastError = fetchError;
+          // Retry on network errors
+          if (attempt < maxRetries) {
+            console.log(`Retrying in 1 second...`);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            continue;
+          }
+        }
       }
-
-      const order = await response.json();
-      console.log('✅ Razorpay order created successfully:', order.id);
-
-      return {
-        statusCode: 200,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify({
-          success: true,
-          order_id: order.id,
-          amount: order.amount,
-          currency: order.currency,
-          receipt: order.receipt,
-        }),
-      };
-    } catch (fetchError) {
-      clearTimeout(timeoutId);
-      if (fetchError.name === 'AbortError') {
-        console.error('❌ Razorpay API timeout after 8 seconds');
-        throw new Error('Razorpay API timeout - please try again');
-      }
-      throw fetchError;
     }
+    
+    // If we get here, all retries failed
+    throw lastError || new Error('Failed to create Razorpay order after retries');
   } catch (error) {
     console.error('❌ Payment creation error:', error);
     console.error('Error details:', {
