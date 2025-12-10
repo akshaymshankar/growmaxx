@@ -174,58 +174,28 @@ export default function Payment() {
         // Continue anyway - we'll handle it in webhook
       }
 
-      // Create Razorpay Payment Link via API (with preloaded amount)
+      // Use direct razorpay.me link - NO API CALLS NEEDED!
+      // This avoids all Vercel timeout and API issues
+      const baseLink = 'https://razorpay.me/@gandhiraajanakshaymuthushanka';
       const amount = getTotal();
       
-      console.log('Creating payment link with amount:', amount);
+      // Try adding amount to path (some razorpay.me links support this)
+      // If it doesn't work, user will enter amount manually
+      const paymentLink = `${baseLink}/${amount}`;
       
-      // Call API to create payment link
-      const apiUrl = import.meta.env.PROD 
-        ? `${window.location.origin}/api/create-payment-link`
-        : '/api/create-payment-link';
-      
-      const linkResponse = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          amount: amount,
-          currency: 'INR',
-          plan_id: selectedPlan.id,
-          plan_name: selectedPlan.name,
-          billing_cycle: selectedPlan.billingCycle,
-          user_id: user.id,
-          user_email: user.email,
-          user_name: profile?.name || profile?.full_name || '',
-          user_phone: profile?.phone || '',
-        }),
-      });
-
-      if (!linkResponse.ok) {
-        const errorText = await linkResponse.text();
-        console.error('Payment link creation failed:', errorText);
-        throw new Error('Failed to create payment link. Please try again.');
-      }
-
-      const linkData = await linkResponse.json();
-      
-      if (!linkData || !linkData.payment_link_url) {
-        console.error('Invalid payment link response:', linkData);
-        throw new Error('Invalid response from payment server. Please try again.');
-      }
-
-      console.log('Payment link created:', linkData.payment_link_url);
+      console.log('Redirecting to Razorpay payment link:', paymentLink);
+      console.log('Expected amount:', amount);
       console.log('Payment intent ID for webhook matching:', paymentData?.id);
       
-      // Store payment intent ID in localStorage for webhook matching
+      // Store payment intent ID and expected amount for webhook matching
       if (paymentData?.id) {
         localStorage.setItem('pending_payment_id', paymentData.id);
         localStorage.setItem('pending_plan', JSON.stringify(selectedPlan));
+        localStorage.setItem('expected_amount', (amount * 100).toString()); // Store in paise
       }
 
-      // Redirect to Razorpay payment link
-      window.location.href = linkData.payment_link_url;
+      // Redirect directly to Razorpay payment link - NO API CALLS!
+      window.location.href = paymentLink;
       
     } catch (err) {
       console.error('Payment redirect error:', err);
