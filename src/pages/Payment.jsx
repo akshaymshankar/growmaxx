@@ -174,16 +174,48 @@ export default function Payment() {
         // Continue anyway - we'll handle it in webhook
       }
 
-      // Build Razorpay.me payment link with amount
-      // Format: https://razorpay.me/@username/amount
-      const baseLink = 'https://razorpay.me/@gandhiraajanakshaymuthushanka';
+      // Create Razorpay Payment Link via API (with preloaded amount)
       const amount = getTotal();
       
-      // Razorpay.me links don't support query parameters
-      // Just use the amount in the URL path
-      const finalPaymentLink = `${baseLink}/${amount}`;
+      console.log('Creating payment link with amount:', amount);
       
-      console.log('Redirecting to Razorpay payment link:', finalPaymentLink);
+      // Call API to create payment link
+      const apiUrl = import.meta.env.PROD 
+        ? `${window.location.origin}/api/create-payment-link`
+        : '/api/create-payment-link';
+      
+      const linkResponse = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          amount: amount,
+          currency: 'INR',
+          plan_id: selectedPlan.id,
+          plan_name: selectedPlan.name,
+          billing_cycle: selectedPlan.billingCycle,
+          user_id: user.id,
+          user_email: user.email,
+          user_name: profile?.name || profile?.full_name || '',
+          user_phone: profile?.phone || '',
+        }),
+      });
+
+      if (!linkResponse.ok) {
+        const errorText = await linkResponse.text();
+        console.error('Payment link creation failed:', errorText);
+        throw new Error('Failed to create payment link. Please try again.');
+      }
+
+      const linkData = await linkResponse.json();
+      
+      if (!linkData || !linkData.payment_link_url) {
+        console.error('Invalid payment link response:', linkData);
+        throw new Error('Invalid response from payment server. Please try again.');
+      }
+
+      console.log('Payment link created:', linkData.payment_link_url);
       console.log('Payment intent ID for webhook matching:', paymentData?.id);
       
       // Store payment intent ID in localStorage for webhook matching
@@ -193,7 +225,7 @@ export default function Payment() {
       }
 
       // Redirect to Razorpay payment link
-      window.location.href = finalPaymentLink;
+      window.location.href = linkData.payment_link_url;
       
     } catch (err) {
       console.error('Payment redirect error:', err);
