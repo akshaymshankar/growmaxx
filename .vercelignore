@@ -1,9 +1,11 @@
 node_modules
+.env
 .env.local
 .env.*.local
-server.js
-*.log
+dist
 .DS_Store
+*.log
 .vscode
 .idea
-
+*.md
+!README.md

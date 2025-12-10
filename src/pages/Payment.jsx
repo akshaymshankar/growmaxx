@@ -135,6 +135,15 @@ export default function Payment() {
   const handleRazorpayPayment = async () => {
     setIsProcessing(true);
     setError('');
+    
+    // Set timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      if (isProcessing) {
+        console.error('Payment timeout - taking too long');
+        setError('Payment is taking too long. Please try again or contact support.');
+        setIsProcessing(false);
+      }
+    }, 30000); // 30 second timeout
 
     try {
       const scriptLoaded = await loadRazorpayScript();
@@ -150,7 +159,16 @@ export default function Payment() {
       
       try {
         // Try backend API first (for production)
-        const orderResponse = await fetch('/api/create-payment', {
+        console.log('Creating payment order...', { amount: getTotal(), plan: selectedPlan.name });
+        
+        // Use absolute URL in production, relative in development
+        const apiUrl = import.meta.env.PROD 
+          ? `${window.location.origin}/api/create-payment`
+          : '/api/create-payment';
+        
+        console.log('Calling API:', apiUrl);
+        
+        const orderResponse = await fetch(apiUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -165,28 +183,68 @@ export default function Payment() {
           }),
         });
 
-        if (orderResponse.ok) {
-          const orderData = await orderResponse.json();
-          orderId = orderData.order_id;
-          orderAmount = orderData.amount;
-        } else {
+        console.log('Order response status:', orderResponse.status);
+        console.log('Order response headers:', Object.fromEntries(orderResponse.headers.entries()));
+
+        if (!orderResponse.ok) {
           const errorText = await orderResponse.text();
-          throw new Error(`API Error: ${errorText || 'Failed to create order'}`);
+          console.error('Order creation failed:', errorText);
+          console.error('Response status:', orderResponse.status);
+          console.error('Response statusText:', orderResponse.statusText);
+          
+          let errorMessage = 'Failed to create payment order. ';
+          
+          try {
+            const errorData = JSON.parse(errorText);
+            errorMessage += errorData.message || errorData.error || 'Please try again.';
+            console.error('Parsed error:', errorData);
+          } catch {
+            errorMessage += errorText || 'Please check your connection and try again.';
+          }
+          
+          throw new Error(errorMessage);
         }
+
+        const orderData = await orderResponse.json();
+        console.log('Order created successfully:', orderData);
+        
+        if (!orderData || !orderData.order_id) {
+          console.error('Invalid order response:', orderData);
+          throw new Error('Invalid order response from server. Please try again.');
+        }
+        
+        orderId = orderData.order_id;
+        orderAmount = orderData.amount || orderAmount;
+        console.log('Using order:', { orderId, orderAmount });
       } catch (apiError) {
-        // Backend not available - show helpful error
+        // Backend not available or error
         console.error('Payment API error:', apiError);
-        setError(`Payment server not available. Please make sure the API server is running. Run: npm run server`);
+        console.error('Error stack:', apiError.stack);
+        clearTimeout(timeoutId);
+        setError(apiError.message || 'Payment server error. Please try again or contact support.');
         setIsProcessing(false);
         return;
       }
+
+      // Note: For UPI autopay, users need to enable it in their UPI app (GPay, PhonePe, etc.)
+      // Razorpay will show the mandate option if supported by the payment method
+
+      if (!orderId) {
+        throw new Error('Order ID is missing. Please try again.');
+      }
+
+      if (!window.Razorpay) {
+        throw new Error('Razorpay SDK not loaded. Please refresh the page and try again.');
+      }
+
+      console.log('Opening Razorpay checkout...', { orderId, amount: orderAmount, key: RAZORPAY_KEY_ID });
 
       const options = {
         key: RAZORPAY_KEY_ID,
         amount: orderAmount, // Amount in paise
         currency: 'INR',
         name: 'GrowMaxx',
-        description: `${selectedPlan.name} Plan - ${selectedPlan.billingCycle === 'yearly' ? 'Yearly' : selectedPlan.billingCycle === 'onetime' ? 'One-time' : 'Monthly'}`,
+        description: `${selectedPlan.name} Plan - ${selectedPlan.billingCycle === 'yearly' ? 'Yearly' : selectedPlan.billingCycle === 'onetime' ? 'One-time' : 'Monthly'}${autopay && selectedPlan.billingCycle !== 'onetime' ? ' (Autopay Enabled)' : ''}`,
         image: '/favicon.svg',
         order_id: orderId,
         handler: async function (response) {
@@ -240,7 +298,7 @@ export default function Payment() {
                   start_date: new Date().toISOString(),
                   end_date: endDate.toISOString(),
                   next_billing_date: endDate.toISOString(),
-                  autopay_enabled: autopay,
+                  autopay_enabled: autopay && selectedPlan.billingCycle !== 'onetime',
                 }, {
                   onConflict: 'user_id',
                 })
@@ -299,7 +357,7 @@ export default function Payment() {
           }
         },
         prefill: {
-          name: profile?.full_name || '',
+          name: profile?.name || profile?.full_name || '',
           email: user?.email || '',
           contact: profile?.phone || '',
         },
@@ -307,37 +365,42 @@ export default function Payment() {
           user_id: user.id,
           plan_id: selectedPlan.id,
           billing_cycle: selectedPlan.billingCycle,
+          autopay_enabled: autopay && selectedPlan.billingCycle !== 'onetime' ? 'true' : 'false',
         },
         theme: {
           color: '#BFFF00',
         },
         modal: {
           ondismiss: function () {
+            console.log('Razorpay modal dismissed');
             setIsProcessing(false);
-            // Update payment as cancelled if record exists
-            if (paymentRecord) {
-              updatePaymentStatus(paymentRecord.id, null, null, 'cancelled');
-            }
+            setError('Payment cancelled by user');
           },
         },
       };
 
+      console.log('Initializing Razorpay instance...');
       const razorpay = new window.Razorpay(options);
       
       razorpay.on('payment.failed', async function (response) {
         console.error('Payment failed:', response.error);
-        setError(response.error.description || 'Payment failed. Please try again.');
+        setError(response.error?.description || 'Payment failed. Please try again.');
         setIsProcessing(false);
-        
-        // Update payment as failed
-        if (paymentRecord) {
-          await updatePaymentStatus(paymentRecord.id, null, null, 'failed');
-        }
       });
 
+      console.log('Opening Razorpay checkout modal...');
+      clearTimeout(timeoutId); // Clear timeout since we're opening Razorpay
       razorpay.open();
+      
+      // If modal doesn't open after 2 seconds, show error
+      setTimeout(() => {
+        if (isProcessing) {
+          console.warn('Razorpay modal may not have opened');
+        }
+      }, 2000);
     } catch (err) {
       console.error('Payment error:', err);
+      clearTimeout(timeoutId);
       setError(err.message || 'Payment initialization failed. Please try again.');
       setIsProcessing(false);
     }
@@ -478,6 +541,11 @@ Please share the payment link.`;
                           <div className="text-sm text-neutral-500">
                             Automatically renew your subscription
                           </div>
+                          {autopay && (
+                            <div className="text-xs text-lime-400 mt-1">
+                              💡 Enable autopay in your UPI app (GPay/PhonePe) when paying
+                            </div>
+                          )}
                         </div>
                         <button
                           onClick={() => setAutopay(!autopay)}

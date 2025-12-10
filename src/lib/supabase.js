@@ -21,14 +21,25 @@ export const getCurrentUser = async () => {
 };
 
 export const getProfile = async (userId) => {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', userId)
-    .single();
-  
-  if (error) throw error;
-  return data;
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+    
+    if (error) {
+      // If profile doesn't exist, that's okay - return null
+      if (error.code === 'PGRST116') {
+        return null;
+      }
+      throw error;
+    }
+    return data;
+  } catch (error) {
+    console.warn('Profile fetch error (non-critical):', error);
+    return null;
+  }
 };
 
 export const updateProfile = async (userId, updates) => {

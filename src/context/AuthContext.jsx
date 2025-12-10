@@ -11,30 +11,117 @@ export function AuthProvider({ children }) {
 
   // Initialize auth state
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setUser(session.user);
-        loadProfile(session.user.id);
+    let mounted = true;
+    
+    // Timeout fallback - ensure loading doesn't hang forever
+    const timeoutId = setTimeout(() => {
+      if (mounted) {
+        console.warn('Auth loading timeout - proceeding anyway');
+        setLoading(false);
       }
-      setLoading(false);
+    }, 5000); // 5 second timeout
+    
+    // Get initial session - check multiple times to catch OAuth callback
+    const checkSession = async () => {
+      let attempts = 0;
+      const maxAttempts = 5;
+      
+      while (attempts < maxAttempts) {
+        attempts++;
+        
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (!mounted) return;
+        
+        if (error) {
+          console.error('Session error:', error);
+          if (attempts === maxAttempts) {
+            clearTimeout(timeoutId);
+            setLoading(false);
+          }
+          continue;
+        }
+        
+        if (session?.user) {
+          clearTimeout(timeoutId);
+          setUser(session.user);
+          loadProfile(session.user.id).finally(() => {
+            if (mounted) setLoading(false);
+          });
+          return;
+        }
+        
+        // Wait before next attempt
+        if (attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+      
+      // No session found after all attempts
+      if (mounted) {
+        clearTimeout(timeoutId);
+        setLoading(false);
+      }
+    };
+    
+    checkSession().catch((err) => {
+      console.error('Session fetch error:', err);
+      if (mounted) {
+        clearTimeout(timeoutId);
+        setLoading(false);
+      }
     });
 
     // Listen for auth changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return;
+      
+      clearTimeout(timeoutId);
+      
       if (session?.user) {
         setUser(session.user);
-        await loadProfile(session.user.id);
+        
+        // Load profile
+        loadProfile(session.user.id).finally(() => {
+          setLoading(false);
+        });
+        
+        // Create profile if it doesn't exist (simple, no complex logic)
+        const userId = session.user.id;
+        const userName = session.user.user_metadata?.name || 
+                        session.user.user_metadata?.full_name ||
+                        session.user.email?.split('@')[0] || 
+                        'User';
+        
+        // Simple insert with ON CONFLICT handling in database
+        // Use try-catch instead of .catch() since insert() returns a query builder
+        try {
+          const { error } = await supabase
+            .from('profiles')
+            .insert({ id: userId, name: userName });
+          
+          // Ignore duplicate key errors (profile already exists)
+          if (error && error.code !== '23505') {
+            console.log('Profile creation note:', error.message);
+          }
+        } catch (err) {
+          // Silently ignore - profile might already exist
+          console.log('Profile creation skipped:', err);
+        }
       } else {
         setUser(null);
         setProfile(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      clearTimeout(timeoutId);
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Load user profile
@@ -44,15 +131,20 @@ export function AuthProvider({ children }) {
       setProfile(profileData);
     } catch (error) {
       console.error('Error loading profile:', error);
+      // Don't fail the app if profile doesn't exist yet
+      setProfile(null);
     }
   };
 
   // Sign up with email
   const signUpWithEmail = async (name, email, phone, password) => {
+    console.log('🔐 Signing up user:', { email, name, phone: phone ? 'provided' : 'not provided' });
+    
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
         data: {
           name,
           phone,
@@ -60,15 +152,46 @@ export function AuthProvider({ children }) {
       },
     });
 
-    if (error) throw error;
+    if (error) {
+      console.error('❌ Signup error:', error);
+      throw error;
+    }
+
+    console.log('✅ Signup response:', { user: data.user?.id, session: data.session ? 'exists' : 'none' });
 
     if (data.user) {
-      // Update profile with additional info
-      if (name || phone) {
-        await supabase
+      // Wait a bit for the trigger to create the profile
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Try to create/update profile
+      try {
+        // First, try to insert (in case trigger didn't run)
+        const { error: insertError } = await supabase
           .from('profiles')
-          .update({ name, phone })
-          .eq('id', data.user.id);
+          .insert({
+            id: data.user.id,
+            name: name || data.user.email?.split('@')[0] || 'User',
+            phone: phone || null,
+          });
+
+        // If insert fails (profile exists), update it
+        if (insertError) {
+          console.log('Profile exists, updating...', insertError);
+          const { error: updateError } = await supabase
+            .from('profiles')
+            .update({ 
+              name: name || data.user.email?.split('@')[0] || 'User',
+              phone: phone || null,
+            })
+            .eq('id', data.user.id);
+          
+          if (updateError) {
+            console.error('Profile update error:', updateError);
+          }
+        }
+      } catch (profileError) {
+        console.error('Profile creation error:', profileError);
+        // Don't fail signup if profile creation fails
       }
       
       setUser(data.user);
@@ -97,30 +220,47 @@ export function AuthProvider({ children }) {
 
   // Sign in with Google
   const signInWithGoogle = async () => {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      });
 
-    if (error) throw error;
-    return data;
+      if (error) {
+        console.error('OAuth error:', error);
+        throw error;
+      }
+
+      // The redirect will happen automatically
+      return data;
+    } catch (error) {
+      console.error('Google sign-in error:', error);
+      throw error;
+    }
   };
 
   // Sign out
   const signOut = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error('Sign out error:', error);
-        // Still clear local state even if Supabase signout fails
-      }
-      
+      // Clear local state first
       setUser(null);
       setProfile(null);
       setSelectedPlan(null);
       localStorage.removeItem('growmaxx_plan');
+      localStorage.clear(); // Clear all localStorage
+      sessionStorage.clear(); // Clear session storage
+      
+      // Sign out from Supabase
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('Sign out error:', error);
+      }
       
       // Force page reload to clear all state
       window.location.href = '/';
@@ -141,15 +281,56 @@ export function AuthProvider({ children }) {
   const updateProfileData = async (updates) => {
     if (!user) throw new Error('Not authenticated');
     
+    console.log('📝 Updating profile:', { userId: user.id, updates });
+    
+    // First, check if profile exists
+    const { data: existingProfile, error: fetchError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+
+    // If profile doesn't exist, create it
+    if (fetchError && fetchError.code === 'PGRST116') {
+      console.log('Profile does not exist, creating...');
+      const { data: newProfile, error: insertError } = await supabase
+        .from('profiles')
+        .insert({
+          id: user.id,
+          ...updates,
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error('Profile creation error:', insertError);
+        throw new Error(`Failed to create profile: ${insertError.message}`);
+      }
+
+      setProfile(newProfile);
+      return newProfile;
+    }
+
+    // Profile exists, update it
+    // Add updated_at timestamp
+    const updatesWithTimestamp = {
+      ...updates,
+      updated_at: new Date().toISOString(),
+    };
+    
     const { data, error } = await supabase
       .from('profiles')
-      .update(updates)
+      .update(updatesWithTimestamp)
       .eq('id', user.id)
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Profile update error:', error);
+      throw new Error(`Failed to update profile: ${error.message}`);
+    }
     
+    console.log('✅ Profile updated successfully:', data);
     setProfile(data);
     return data;
   };
@@ -169,7 +350,16 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {loading ? (
+        <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin w-8 h-8 border-2 border-lime-400 border-t-transparent rounded-full mx-auto mb-4" />
+            <p className="text-neutral-400">Loading...</p>
+          </div>
+        </div>
+      ) : (
+        children
+      )}
     </AuthContext.Provider>
   );
 }

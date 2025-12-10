@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
+import PhoneOTPVerification from '../components/PhoneOTPVerification';
 
 export default function Dashboard() {
   const { user, profile, signOut, updateProfileData } = useAuth();
@@ -23,38 +24,78 @@ export default function Dashboard() {
 
   const loadDashboardData = async () => {
     try {
-      // Load subscription
-      const { data: subData } = await supabase
+      // Load subscription (check for active or expired)
+      const { data: subData, error: subError } = await supabase
         .from('subscriptions')
         .select('*')
         .eq('user_id', user.id)
-        .eq('status', 'active')
         .order('created_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle(); // Use maybeSingle() to handle missing data gracefully
 
-      if (subData) setSubscription(subData);
+      if (subData && !subError) {
+        // Check if subscription is expired
+        const endDate = new Date(subData.end_date);
+        const now = new Date();
+        if (endDate < now && subData.status === 'active') {
+          // Subscription expired - update status and deactivate website
+          await supabase
+            .from('subscriptions')
+            .update({ status: 'expired' })
+            .eq('id', subData.id);
+          
+          // Deactivate website
+          const { data: websiteData } = await supabase
+            .from('websites')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          
+          if (websiteData && websiteData.status === 'live') {
+            await supabase
+              .from('websites')
+              .update({ status: 'suspended' })
+              .eq('id', websiteData.id);
+          }
+          
+          setSubscription({ ...subData, status: 'expired' });
+        } else {
+          setSubscription(subData);
+        }
+      }
 
-      // Load payments
-      const { data: paymentsData } = await supabase
-        .from('payments')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(10);
+      // Load payments (handle errors gracefully)
+      try {
+        const { data: paymentsData } = await supabase
+          .from('payments')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(10);
 
-      if (paymentsData) setPayments(paymentsData);
+        if (paymentsData) setPayments(paymentsData);
+      } catch (payError) {
+        console.warn('Payments table not available:', payError);
+        setPayments([]);
+      }
 
-      // Load website
-      const { data: websiteData } = await supabase
-        .from('websites')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
+      // Load website (handle errors gracefully)
+      try {
+        const { data: websiteData } = await supabase
+          .from('websites')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-      if (websiteData) setWebsite(websiteData);
+        if (websiteData) setWebsite(websiteData);
+      } catch (webError) {
+        console.warn('Websites table not available:', webError);
+        setWebsite(null);
+      }
     } catch (error) {
       console.error('Error loading dashboard:', error);
     } finally {
@@ -93,16 +134,14 @@ export default function Dashboard() {
                 <div className="text-xs text-neutral-500">{user?.email}</div>
               </div>
               <button
-                onClick={async () => {
-                  try {
-                    await signOut();
-                  } catch (err) {
+                onClick={() => {
+                  signOut().catch((err) => {
                     console.error('Sign out error:', err);
                     // Force redirect anyway
                     window.location.href = '/';
-                  }
+                  });
                 }}
-                className="px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors"
+                className="px-4 py-2 text-sm text-neutral-400 hover:text-white transition-colors border border-white/10 rounded-lg hover:bg-white/5"
               >
                 Sign out
               </button>
@@ -119,12 +158,43 @@ export default function Dashboard() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <h1 className="text-3xl font-display font-bold text-white mb-2">
-            Welcome back, {profile?.name || 'there'}! 👋
-          </h1>
-          <p className="text-neutral-400">
-            Manage your website, payments, and growth all in one place.
-          </p>
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <h1 className="text-3xl font-display font-bold text-white mb-2">
+                Welcome back, {profile?.name || user?.email?.split('@')[0] || 'there'}! 👋
+              </h1>
+              <p className="text-neutral-400">
+                Manage your website, payments, and growth all in one place.
+              </p>
+            </div>
+            {profile?.business_name && (
+              <div className="text-right">
+                <div className="text-sm text-neutral-500 mb-1">Organization</div>
+                <div className="text-lg font-bold text-lime-400">{profile.business_name}</div>
+              </div>
+            )}
+          </div>
+          
+          {/* Website Status Alert */}
+          {website && subscription && subscription.status === 'expired' && (
+            <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">⚠️</span>
+                <div>
+                  <div className="text-white font-medium">Website Suspended</div>
+                  <div className="text-sm text-neutral-400">
+                    Your subscription has expired. Please renew to reactivate your website at {website.site_url || 'your domain'}.
+                  </div>
+                </div>
+                <Link
+                  to="/select-plan"
+                  className="ml-auto px-4 py-2 bg-lime-400 text-[#050505] rounded-lg font-bold hover:bg-lime-500 transition-colors"
+                >
+                  Renew Now
+                </Link>
+              </div>
+            </div>
+          )}
         </motion.div>
 
         {/* Stats Cards */}
@@ -170,12 +240,12 @@ export default function Dashboard() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-6 border-b border-white/[0.04]">
+        <div className="flex gap-2 mb-6 border-b border-white/[0.04] overflow-x-auto">
           {[
             { id: 'overview', label: 'Overview', icon: '📊' },
-            { id: 'billing', label: 'Payments & Billing', icon: '💳' },
+            { id: 'billing', label: 'Billing Plans', icon: '💳' },
             { id: 'website', label: 'My Website', icon: '🌐' },
-            { id: 'profile', label: 'Profile', icon: '👤' },
+            { id: 'profile', label: 'Organization', icon: '🏢' },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -196,7 +266,7 @@ export default function Dashboard() {
         <div className="mt-6">
           {activeTab === 'overview' && <OverviewTab subscription={subscription} website={website} />}
           {activeTab === 'billing' && <BillingTab subscription={subscription} payments={payments} navigate={navigate} />}
-          {activeTab === 'website' && <WebsiteTab website={website} />}
+          {activeTab === 'website' && <WebsiteTab website={website} subscription={subscription} />}
           {activeTab === 'profile' && <ProfileTab profile={profile} updateProfile={updateProfileData} />}
         </div>
       </main>
@@ -332,7 +402,9 @@ function BillingTab({ subscription, payments, navigate }) {
 }
 
 // Website Tab
-function WebsiteTab({ website }) {
+function WebsiteTab({ website, subscription }) {
+  const isSuspended = website?.status === 'suspended' || subscription?.status === 'expired';
+  
   return (
     <div className="space-y-6">
       {!website ? (
@@ -340,34 +412,65 @@ function WebsiteTab({ website }) {
           <div className="text-4xl mb-4">🌐</div>
           <h3 className="text-xl font-bold text-white mb-2">No Website Yet</h3>
           <p className="text-neutral-400 mb-6">Your website will appear here once you subscribe</p>
-          <a
-            href="https://wa.me/916380006001?text=Hi!%20I%20want%20to%20start%20building%20my%20website"
-            target="_blank"
-            rel="noopener noreferrer"
+          <Link
+            to="/select-plan"
             className="btn-primary inline-block"
           >
-            Contact Us to Get Started
-          </a>
+            Choose a Plan
+          </Link>
         </div>
       ) : (
         <div className="bg-[#0A0A0A] border border-white/[0.04] rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-bold text-white">{website.site_name}</h3>
             <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-              website.status === 'live' ? 'bg-lime-400/10 text-lime-400' : 'bg-yellow-400/10 text-yellow-400'
+              website.status === 'live' && !isSuspended
+                ? 'bg-lime-400/10 text-lime-400' 
+                : isSuspended
+                ? 'bg-red-400/10 text-red-400'
+                : 'bg-yellow-400/10 text-yellow-400'
             }`}>
-              {website.status}
+              {isSuspended ? 'Suspended' : website.status}
             </span>
           </div>
+          
+          {isSuspended && (
+            <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
+              <div className="text-red-400 text-sm">
+                <strong>Website Deactivated:</strong> Your subscription has expired. 
+                Renew your plan to reactivate your website.
+              </div>
+              <Link
+                to="/select-plan"
+                className="mt-3 inline-block px-4 py-2 bg-lime-400 text-[#050505] rounded-lg font-bold hover:bg-lime-500 transition-colors text-sm"
+              >
+                Renew Subscription
+              </Link>
+            </div>
+          )}
+          
           {website.site_url && (
-            <a
-              href={website.site_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-lime-400 hover:underline"
-            >
-              {website.site_url} →
-            </a>
+            <div className="space-y-2">
+              <div className="text-sm text-neutral-500">Website URL</div>
+              <a
+                href={website.site_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`text-lg font-medium ${
+                  isSuspended 
+                    ? 'text-neutral-500 line-through cursor-not-allowed' 
+                    : 'text-lime-400 hover:underline'
+                }`}
+                onClick={(e) => {
+                  if (isSuspended) {
+                    e.preventDefault();
+                    alert('Website is suspended. Please renew your subscription.');
+                  }
+                }}
+              >
+                {website.site_url} {!isSuspended && '→'}
+              </a>
+            </div>
           )}
         </div>
       )}
@@ -378,6 +481,12 @@ function WebsiteTab({ website }) {
 // Profile Tab
 function ProfileTab({ profile, updateProfile }) {
   const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [showOTP, setShowOTP] = useState(false);
+  const [pendingPhone, setPendingPhone] = useState('');
+  
   const [formData, setFormData] = useState({
     name: profile?.name || '',
     phone: profile?.phone || '',
@@ -386,12 +495,46 @@ function ProfileTab({ profile, updateProfile }) {
     city: profile?.city || '',
   });
 
+  // Update form data when profile changes
+  useEffect(() => {
+    if (profile) {
+      setFormData({
+        name: profile.name || '',
+        phone: profile.phone || '',
+        business_name: profile.business_name || '',
+        business_type: profile.business_type || '',
+        city: profile.city || '',
+      });
+    }
+  }, [profile]);
+
   const handleSave = async () => {
+    setSaving(true);
+    setSaveError('');
+    setSaveSuccess(false);
+    
     try {
+      // Check if phone is changed or not verified
+      const phoneChanged = formData.phone && formData.phone !== profile?.phone;
+      const phoneUnverified = formData.phone && !profile?.phone_verified;
+      
+      // If phone is changed or unverified, require verification
+      if (phoneChanged || phoneUnverified) {
+        setSaveError('Please verify your phone number before saving. Click "Verify Phone Number" to continue.');
+        setSaving(false);
+        return;
+      }
+      
       await updateProfile(formData);
+      setSaveSuccess(true);
       setEditing(false);
+      // Clear success message after 3 seconds
+      setTimeout(() => setSaveSuccess(false), 3000);
     } catch (error) {
       console.error('Error updating profile:', error);
+      setSaveError(error.message || 'Failed to save profile. Please try again.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -401,7 +544,11 @@ function ProfileTab({ profile, updateProfile }) {
         <h3 className="font-bold text-white">Profile Information</h3>
         {!editing ? (
           <button
-            onClick={() => setEditing(true)}
+            onClick={() => {
+              setEditing(true);
+              setSaveError('');
+              setSaveSuccess(false);
+            }}
             className="text-sm text-lime-400 hover:underline"
           >
             Edit
@@ -409,20 +556,48 @@ function ProfileTab({ profile, updateProfile }) {
         ) : (
           <div className="flex gap-2">
             <button
-              onClick={() => setEditing(false)}
+              onClick={() => {
+                setEditing(false);
+                setSaveError('');
+                setSaveSuccess(false);
+                // Reset form data
+                setFormData({
+                  name: profile?.name || '',
+                  phone: profile?.phone || '',
+                  business_name: profile?.business_name || '',
+                  business_type: profile?.business_type || '',
+                  city: profile?.city || '',
+                });
+              }}
               className="text-sm text-neutral-400 hover:text-white"
+              disabled={saving}
             >
               Cancel
             </button>
             <button
               onClick={handleSave}
-              className="text-sm text-lime-400 hover:underline"
+              disabled={saving}
+              className="text-sm text-lime-400 hover:underline disabled:opacity-50"
             >
-              Save
+              {saving ? 'Saving...' : 'Save'}
             </button>
           </div>
         )}
       </div>
+
+      {/* Success Message */}
+      {saveSuccess && (
+        <div className="mb-4 p-3 bg-lime-400/10 border border-lime-400/20 rounded-lg text-lime-400 text-sm">
+          Profile updated successfully!
+        </div>
+      )}
+
+      {/* Error Message */}
+      {saveError && (
+        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
+          {saveError}
+        </div>
+      )}
 
       <div className="space-y-4">
         <div>
@@ -440,32 +615,78 @@ function ProfileTab({ profile, updateProfile }) {
         </div>
 
         <div>
-          <label className="block text-sm text-neutral-400 mb-2">Phone (WhatsApp)</label>
+          <label className="block text-sm text-neutral-400 mb-2">
+            Phone (WhatsApp)
+            {profile?.phone_verified && (
+              <span className="ml-2 text-xs text-lime-400">✓ Verified</span>
+            )}
+          </label>
           {editing ? (
-            <input
-              type="tel"
-              value={formData.phone}
-              onChange={(e) => setFormData({...formData, phone: e.target.value})}
-              className="input"
-            />
+            <div className="space-y-2">
+              <input
+                type="tel"
+                value={formData.phone}
+                onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                className="input"
+                placeholder="+91 98765 43210"
+              />
+              {formData.phone && (
+                <div className="space-y-2">
+                  {formData.phone !== profile?.phone && (
+                    <button
+                      onClick={() => {
+                        setPendingPhone(formData.phone);
+                        setShowOTP(true);
+                      }}
+                      className="text-sm text-lime-400 hover:underline"
+                    >
+                      Verify Phone Number
+                    </button>
+                  )}
+                  {formData.phone === profile?.phone && !profile?.phone_verified && (
+                    <button
+                      onClick={() => {
+                        setPendingPhone(formData.phone);
+                        setShowOTP(true);
+                      }}
+                      className="text-sm text-yellow-400 hover:underline"
+                    >
+                      Verify Phone Number (Required)
+                    </button>
+                  )}
+                  {!profile?.phone_verified && formData.phone && (
+                    <p className="text-xs text-yellow-400">
+                      ⚠️ Phone must be verified before saving
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
           ) : (
-            <div className="text-white">{formData.phone || 'Not set'}</div>
+            <div className="flex items-center gap-2">
+              <span className="text-white">{formData.phone || 'Not set'}</span>
+              {!profile?.phone_verified && formData.phone && (
+                <span className="text-xs text-yellow-400">(Not verified)</span>
+              )}
+            </div>
           )}
         </div>
 
         <div>
-          <label className="block text-sm text-neutral-400 mb-2">Business Name</label>
+          <label className="block text-sm text-neutral-400 mb-2">Organization Name</label>
           {editing ? (
             <input
               type="text"
               value={formData.business_name}
               onChange={(e) => setFormData({...formData, business_name: e.target.value})}
               className="input"
+              placeholder="Your Company Name"
             />
           ) : (
-            <div className="text-white">{formData.business_name || 'Not set'}</div>
+            <div className="text-white font-medium">{formData.business_name || 'Not set'}</div>
           )}
         </div>
+
 
         <div>
           <label className="block text-sm text-neutral-400 mb-2">Business Type</label>
@@ -503,6 +724,31 @@ function ProfileTab({ profile, updateProfile }) {
           )}
         </div>
       </div>
+
+      {/* OTP Verification Modal */}
+      {showOTP && (
+        <PhoneOTPVerification
+          phone={pendingPhone}
+          onVerify={async (verifiedPhone) => {
+            try {
+              await updateProfile({
+                ...formData,
+                phone: verifiedPhone,
+                phone_verified: true,
+              });
+              setShowOTP(false);
+              setSaveSuccess(true);
+              setTimeout(() => setSaveSuccess(false), 3000);
+            } catch (err) {
+              console.error('OTP verification error:', err);
+            }
+          }}
+          onCancel={() => {
+            setShowOTP(false);
+            setPendingPhone('');
+          }}
+        />
+      )}
     </div>
   );
 }

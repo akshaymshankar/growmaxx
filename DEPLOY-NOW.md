@@ -1,90 +1,72 @@
-# 🚀 DEPLOY NOW - Quick Steps
+# 🚀 DEPLOY NOW - Quick Guide
 
-## ✅ Build Test: PASSED ✓
+## ✅ Everything is Ready!
 
-Your code is ready to deploy!
+Your Green API credentials are configured:
+- **idInstance**: `7105416689`
+- **apiTokenInstance**: `e7dfed4e95dc44ddbea1ca75c547c3a4ea8eb608929042ec86`
 
----
+## 📋 Quick Deployment Steps
 
-## 🎯 Fastest Way to Deploy (5 minutes)
+### 1. Set Environment Variables in Vercel
 
-### 1. Install Vercel CLI
-```bash
-npm install -g vercel
+Go to **Vercel Dashboard** → Your Project → **Settings** → **Environment Variables**
+
+Add these:
+
+**For Production:**
+```
+SUPABASE_URL=https://qrwsqjztooxeziqfrmjx.supabase.co
+SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFyd3Nxanp0b294ZXppcWZybWp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyNTY2MTEsImV4cCI6MjA4MDgzMjYxMX0.woX1RFTOnSN-JRdObGWsrvhCpLBNRcA4m7TTLUdvy0A
+RAZORPAY_KEY_ID=rzp_live_RpPJAYduTK0PS7
+RAZORPAY_KEY_SECRET=7CjgSBmlW2rhdtWKrcJ4fH75
+GREEN_API_ID_INSTANCE=7105416689
+GREEN_API_TOKEN=e7dfed4e95dc44ddbea1ca75c547c3a4ea8eb608929042ec86
+VITE_SUPABASE_URL=https://qrwsqjztooxeziqfrmjx.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFyd3Nxanp0b294ZXppcWZybWp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyNTY2MTEsImV4cCI6MjA4MDgzMjYxMX0.woX1RFTOnSN-JRdObGWsrvhCpLBNRcA4m7TTLUdvy0A
+VITE_RAZORPAY_KEY_ID=rzp_live_RpPJAYduTK0PS7
 ```
 
-### 2. Login
-```bash
-vercel login
-```
+### 2. Run SQL Scripts in Supabase
 
-### 3. Deploy
+Go to **Supabase Dashboard** → **SQL Editor**
+
+Run these in order:
+1. `CREATE-OTP-TABLE.sql` (creates OTP storage table)
+2. `ADD-MISSING-COLUMNS.sql` (adds business_name, business_type, city columns)
+
+### 3. Deploy to Vercel
+
+**Option A: Via CLI**
 ```bash
 cd C:\landing\nova-local
 vercel --prod
 ```
 
-Follow the prompts - it's that simple!
+**Option B: Via GitHub**
+1. Push to GitHub:
+   ```bash
+   git add .
+   git commit -m "Ready for deployment"
+   git push origin main
+   ```
+2. Vercel will auto-deploy from GitHub
 
----
+### 4. Test Everything
 
-## 🔑 After Deployment - Add Environment Variables
+After deployment, test:
+- ✅ Google Sign In → Should go to dashboard
+- ✅ Phone OTP → Should receive WhatsApp message
+- ✅ Payment → Should work with Razorpay
 
-Go to: **Vercel Dashboard → Your Project → Settings → Environment Variables**
+## 🎯 That's It!
 
-Add these **10 variables**:
+Your app is now live with:
+- ✅ Google Authentication
+- ✅ WhatsApp OTP Verification
+- ✅ Razorpay Payments
+- ✅ All working seamlessly!
 
-### Copy-Paste Ready:
+## 📞 Need Help?
 
-**Frontend (VITE_*):**
-```
-VITE_SUPABASE_URL=https://qrwsqjztooxeziqfrmjx.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFyd3Nxanp0b294ZXppcWZybWp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyNTY2MTEsImV4cCI6MjA4MDgzMjYxMX0.woX1RFTOnSN-JRdObGWsrvhCpLBNRcA4m7TTLUdvy0A
-VITE_RAZORPAY_KEY_ID=rzp_live_RpPJAYduTK0PS7
-VITE_GOOGLE_CLIENT_ID=[Your Google Client ID]
-VITE_APP_URL=https://your-app-name.vercel.app
-```
-
-**Backend (Server-only):**
-```
-SUPABASE_URL=https://qrwsqjztooxeziqfrmjx.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=[Get from Supabase Dashboard → Settings → API → service_role key]
-RAZORPAY_KEY_ID=rzp_live_RpPJAYduTK0PS7
-RAZORPAY_KEY_SECRET=7CjgSBmlW2rhdtWKrcJ4fH75
-GOOGLE_CLIENT_SECRET=[Your Google Client Secret]
-```
-
-**⚠️ Important:**
-1. Replace `VITE_APP_URL` with your actual Vercel URL after deployment
-2. Get `SUPABASE_SERVICE_ROLE_KEY` from Supabase Dashboard
-3. After adding all variables, click **"Redeploy"** button
-
----
-
-## 🌐 Update Google OAuth
-
-1. After deployment, copy your Vercel URL
-2. Go to: https://console.cloud.google.com/apis/credentials
-3. Edit your OAuth Client
-4. Add redirect URI: `https://your-app.vercel.app/auth/callback`
-5. Save
-
----
-
-## ✅ Test
-
-1. Visit your Vercel URL
-2. Test sign up
-3. Test payment
-4. Check dashboard
-
----
-
-## 📚 Full Guide
-
-See **DEPLOYMENT-GUIDE.md** for detailed instructions.
-
----
-
-**🎉 You're ready to go live!**
-
+Check `DEPLOYMENT-CHECKLIST.md` for detailed troubleshooting.

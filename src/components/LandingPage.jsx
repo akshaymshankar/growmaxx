@@ -23,6 +23,8 @@ const PAYMENT_LINKS = {
 };
 
 export default function LandingPage() {
+  console.log('🏠 LandingPage component rendering...');
+  
   return (
     <div className="relative min-h-screen bg-[#050505]">
       {/* Subtle Background */}

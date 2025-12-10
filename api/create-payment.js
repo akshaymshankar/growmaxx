@@ -1,30 +1,69 @@
+// @vercel/node
 // Vercel Serverless Function
 // POST /api/create-payment
 
 import Razorpay from 'razorpay';
 
-export default async function handler(req, res) {
-  // Enable CORS
-  res.setHeader('Access-Control-Allow-Credentials', true);
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
-
+export default async function handler(req) {
+  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
+      body: '',
+    };
   }
 
   // Only allow POST
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return {
+      statusCode: 405,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
+      body: JSON.stringify({ error: 'Method not allowed' }),
+    };
   }
 
   try {
-    const { amount, currency = 'INR', plan_id, plan_name, billing_cycle, user_id } = req.body;
+    // Check if Razorpay credentials are configured
+    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+      console.error('Razorpay credentials not configured');
+      return {
+        statusCode: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({ 
+          error: 'Payment gateway not configured',
+          message: 'RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET must be set in environment variables'
+        }),
+      };
+    }
+
+    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+    const { amount, currency = 'INR', plan_id, plan_name, billing_cycle, user_id } = body;
+
+    console.log('Payment request:', { amount, plan_id, user_id: user_id?.substring(0, 8) });
 
     if (!amount || !plan_id || !user_id) {
-      return res.status(400).json({ error: 'Missing required fields' });
+      return {
+        statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({ 
+          error: 'Missing required fields',
+          message: 'amount, plan_id, and user_id are required'
+        }),
+      };
     }
 
     // Initialize Razorpay
@@ -48,18 +87,32 @@ export default async function handler(req, res) {
 
     const order = await razorpay.orders.create(options);
 
-    return res.status(200).json({
-      success: true,
-      order_id: order.id,
-      amount: order.amount,
-      currency: order.currency,
-      receipt: order.receipt,
-    });
+    return {
+      statusCode: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
+      body: JSON.stringify({
+        success: true,
+        order_id: order.id,
+        amount: order.amount,
+        currency: order.currency,
+        receipt: order.receipt,
+      }),
+    };
   } catch (error) {
     console.error('Razorpay error:', error);
-    return res.status(500).json({
-      error: 'Payment creation failed',
-      message: error.message,
-    });
+    return {
+      statusCode: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
+      body: JSON.stringify({
+        error: 'Payment creation failed',
+        message: error.message,
+      }),
+    };
   }
 }

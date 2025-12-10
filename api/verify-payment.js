@@ -1,30 +1,48 @@
+// @vercel/node
 // Vercel Serverless Function
 // POST /api/verify-payment
 
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 
-export default async function handler(req, res) {
-  // Enable CORS
-  res.setHeader('Access-Control-Allow-Credentials', true);
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
-
+export default async function handler(req) {
+  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
+      body: '',
+    };
   }
 
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return {
+      statusCode: 405,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
+      body: JSON.stringify({ error: 'Method not allowed' }),
+    };
   }
 
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, user_id, plan } = req.body;
+    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, user_id, plan } = body;
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !user_id) {
-      return res.status(400).json({ error: 'Missing required fields' });
+      return {
+        statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({ error: 'Missing required fields' }),
+      };
     }
 
     // Verify signature
@@ -35,7 +53,14 @@ export default async function handler(req, res) {
       .digest('hex');
 
     if (generated_signature !== razorpay_signature) {
-      return res.status(400).json({ error: 'Invalid payment signature' });
+      return {
+        statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify({ error: 'Invalid payment signature' }),
+      };
     }
 
     // Initialize Supabase with service role key
@@ -97,16 +122,30 @@ export default async function handler(req, res) {
       }
     }
 
-    return res.status(200).json({
-      success: true,
-      payment_id: razorpay_payment_id,
-      message: 'Payment verified successfully',
-    });
+    return {
+      statusCode: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
+      body: JSON.stringify({
+        success: true,
+        payment_id: razorpay_payment_id,
+        message: 'Payment verified successfully',
+      }),
+    };
   } catch (error) {
     console.error('Verification error:', error);
-    return res.status(500).json({
-      error: 'Payment verification failed',
-      message: error.message,
-    });
+    return {
+      statusCode: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
+      body: JSON.stringify({
+        error: 'Payment verification failed',
+        message: error.message,
+      }),
+    };
   }
 }

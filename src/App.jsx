@@ -70,14 +70,6 @@ function AppRoutes() {
           </AuthRoute>
         } 
       />
-      <Route 
-        path="/signup" 
-        element={
-          <AuthRoute>
-            <SignIn />
-          </AuthRoute>
-        } 
-      />
       
       {/* OAuth Callback */}
       <Route path="/auth/callback" element={<AuthCallback />} />
@@ -123,6 +115,8 @@ function AppRoutes() {
 }
 
 export default function App() {
+  console.log('🚀 App component rendering...');
+  
   return (
     <BrowserRouter>
       <AuthProvider>
