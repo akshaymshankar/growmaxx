@@ -94,7 +94,18 @@ export default async function handler(req) {
       receipt: options.receipt
     });
 
-    const order = await razorpay.orders.create(options);
+    // Add timeout to Razorpay API call (10 seconds)
+    // This prevents the function from hanging for 300 seconds
+    const createOrderWithTimeout = () => {
+      return Promise.race([
+        razorpay.orders.create(options),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Razorpay API timeout after 10 seconds')), 10000)
+        )
+      ]);
+    };
+
+    const order = await createOrderWithTimeout();
 
     console.log('✅ Razorpay order created successfully:', order.id);
 
