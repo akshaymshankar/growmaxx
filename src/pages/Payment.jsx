@@ -131,341 +131,82 @@ export default function Payment() {
     return { error };
   };
 
-  // Handle Razorpay Payment
+  // Handle Razorpay Payment - Using Payment Links (No API calls needed!)
   const handleRazorpayPayment = async () => {
     setIsProcessing(true);
     setError('');
-    
-    // Set timeout to prevent infinite loading
-    const timeoutId = setTimeout(() => {
-      if (isProcessing) {
-        console.error('Payment timeout - taking too long');
-        setError('Payment is taking too long. Please try again or contact support.');
-        setIsProcessing(false);
-      }
-    }, 30000); // 30 second timeout
 
     try {
-      const scriptLoaded = await loadRazorpayScript();
-      
-      if (!scriptLoaded) {
-        throw new Error('Failed to load payment gateway. Please try again.');
-      }
-
-      // For local dev, create order directly with Razorpay
-      // In production, this should go through your backend API
-      let orderId;
-      let orderAmount = getTotal() * 100; // Convert to paise
-      
-      try {
-        // Try backend API first (for production)
-        console.log('Creating payment order...', { amount: getTotal(), plan: selectedPlan.name });
-        console.log('Environment:', { 
-          PROD: import.meta.env.PROD, 
-          MODE: import.meta.env.MODE,
-          origin: window.location.origin 
-        });
-        
-        // Use absolute URL in production, relative in development
-        const apiUrl = import.meta.env.PROD 
-          ? `${window.location.origin}/api/create-payment`
-          : '/api/create-payment';
-        
-        console.log('Calling API:', apiUrl);
-        console.log('Request payload:', {
-          amount: getTotal(),
-          currency: 'INR',
-          plan_id: selectedPlan.id,
-          plan_name: selectedPlan.name,
-          billing_cycle: selectedPlan.billingCycle,
-          user_id: user.id,
-        });
-        
-        const fetchStartTime = Date.now();
-        
-        // Add timeout to fetch (25 seconds - longer than backend timeout)
-        const fetchController = new AbortController();
-        const fetchTimeout = setTimeout(() => {
-          fetchController.abort();
-        }, 25000); // 25 second timeout (backend has 15s + retries)
-        
-        let orderResponse;
-        try {
-          orderResponse = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              amount: getTotal(),
-              currency: 'INR',
-              plan_id: selectedPlan.id,
-              plan_name: selectedPlan.name,
-              billing_cycle: selectedPlan.billingCycle,
-              user_id: user.id,
-            }),
-            signal: fetchController.signal,
-          });
-          clearTimeout(fetchTimeout);
-        } catch (fetchError) {
-          clearTimeout(fetchTimeout);
-          if (fetchError.name === 'AbortError') {
-            console.error('❌ API call timed out after 15 seconds');
-            throw new Error('Payment server is taking too long to respond. Please try again.');
-          }
-          throw fetchError;
-        }
-
-        const fetchTime = Date.now() - fetchStartTime;
-        console.log(`✅ API call completed in ${fetchTime}ms`);
-        console.log('Order response status:', orderResponse.status);
-        console.log('Order response statusText:', orderResponse.statusText);
-        console.log('Order response headers:', Object.fromEntries(orderResponse.headers.entries()));
-
-        if (!orderResponse.ok) {
-          const errorText = await orderResponse.text();
-          console.error('Order creation failed:', errorText);
-          console.error('Response status:', orderResponse.status);
-          console.error('Response statusText:', orderResponse.statusText);
-          
-          let errorMessage = 'Failed to create payment order. ';
-          
-          try {
-            const errorData = JSON.parse(errorText);
-            errorMessage += errorData.message || errorData.error || 'Please try again.';
-            console.error('Parsed error:', errorData);
-          } catch {
-            errorMessage += errorText || 'Please check your connection and try again.';
-          }
-          
-          // Show specific error for 500 (likely missing env vars)
-          if (orderResponse.status === 500) {
-            errorMessage = 'Payment server error. Please check that Razorpay credentials are configured in Vercel.';
-          } else if (orderResponse.status === 404) {
-            errorMessage = 'Payment API not found. Please check deployment.';
-          }
-          
-          throw new Error(errorMessage);
-        }
-
-        const orderData = await orderResponse.json();
-        console.log('Order created successfully:', orderData);
-        
-        if (!orderData || !orderData.order_id) {
-          console.error('Invalid order response:', orderData);
-          throw new Error('Invalid order response from server. Please try again.');
-        }
-        
-        orderId = orderData.order_id;
-        orderAmount = orderData.amount || orderAmount;
-        console.log('Using order:', { orderId, orderAmount });
-      } catch (apiError) {
-        // Backend not available or error
-        console.error('❌ Payment API error:', apiError);
-        console.error('Error name:', apiError.name);
-        console.error('Error message:', apiError.message);
-        console.error('Error stack:', apiError.stack);
-        
-        // Check if it's a network error
-        if (apiError.name === 'TypeError' && (apiError.message.includes('fetch') || apiError.message.includes('Failed to fetch'))) {
-          console.error('❌ Network error - API endpoint may not be accessible');
-          clearTimeout(timeoutId);
-          setError('Cannot connect to payment server. The API endpoint may not be deployed. Please check Vercel deployment.');
-          setIsProcessing(false);
-          return;
-        }
-        
-        // Check if it's a timeout
-        if (apiError.message.includes('too long')) {
-          console.error('❌ API timeout');
-          clearTimeout(timeoutId);
-          setError('Payment server is not responding. Please check Vercel function logs and try again.');
-          setIsProcessing(false);
-          return;
-        }
-        
-        clearTimeout(timeoutId);
-        setError(apiError.message || 'Payment server error. Please try again or contact support.');
-        setIsProcessing(false);
-        return;
-      }
-
-      // Note: For UPI autopay, users need to enable it in their UPI app (GPay, PhonePe, etc.)
-      // Razorpay will show the mandate option if supported by the payment method
-
-      if (!orderId) {
-        throw new Error('Order ID is missing. Please try again.');
-      }
-
-      if (!window.Razorpay) {
-        throw new Error('Razorpay SDK not loaded. Please refresh the page and try again.');
-      }
-
-      console.log('Opening Razorpay checkout...', { orderId, amount: orderAmount, key: RAZORPAY_KEY_ID });
-
-      const options = {
-        key: RAZORPAY_KEY_ID,
-        amount: orderAmount, // Amount in paise
+      // Save payment intent to database before redirecting
+      // This helps us track which user is paying for which plan
+      const paymentIntent = {
+        user_id: user.id,
+        plan_id: selectedPlan.id,
+        plan_name: selectedPlan.name,
+        billing_cycle: selectedPlan.billingCycle,
+        amount: getTotal() * 100, // Store in paise
         currency: 'INR',
-        name: 'GrowMaxx',
-        description: `${selectedPlan.name} Plan - ${selectedPlan.billingCycle === 'yearly' ? 'Yearly' : selectedPlan.billingCycle === 'onetime' ? 'One-time' : 'Monthly'}${autopay && selectedPlan.billingCycle !== 'onetime' ? ' (Autopay Enabled)' : ''}`,
-        image: '/favicon.svg',
-        order_id: orderId,
-        handler: async function (response) {
-          try {
-            // Save payment to database
-            const { data: paymentData, error: paymentError } = await supabase
-              .from('payments')
-              .insert({
-                user_id: user.id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_order_id: response.razorpay_order_id,
-                amount: getTotal(),
-                currency: 'INR',
-                status: 'success',
-                payment_method: 'razorpay',
-                metadata: {
-                  plan: {
-                    id: selectedPlan.id,
-                    name: selectedPlan.name,
-                    billing_cycle: selectedPlan.billingCycle,
-                  },
-                  signature: response.razorpay_signature,
-                },
-              })
-              .select()
-              .single();
-
-            if (paymentError) {
-              console.error('Payment save error:', paymentError);
-              // Continue anyway - payment was successful
-            }
-
-            // Create or update subscription
-            if (selectedPlan.billingCycle !== 'onetime') {
-              const endDate = new Date();
-              if (selectedPlan.billingCycle === 'monthly') {
-                endDate.setMonth(endDate.getMonth() + 1);
-              } else if (selectedPlan.billingCycle === 'yearly') {
-                endDate.setFullYear(endDate.getFullYear() + 1);
-              }
-
-              const { data: subscriptionData, error: subError } = await supabase
-                .from('subscriptions')
-                .upsert({
-                  user_id: user.id,
-                  plan_id: selectedPlan.id,
-                  plan_name: selectedPlan.name,
-                  billing_cycle: selectedPlan.billingCycle,
-                  amount: getTotal(),
-                  status: 'active',
-                  start_date: new Date().toISOString(),
-                  end_date: endDate.toISOString(),
-                  next_billing_date: endDate.toISOString(),
-                  autopay_enabled: autopay && selectedPlan.billingCycle !== 'onetime',
-                }, {
-                  onConflict: 'user_id',
-                })
-                .select()
-                .single();
-
-              if (subError) {
-                console.error('Subscription error:', subError);
-              }
-            }
-
-            // Try backend verification (optional - for production)
-            try {
-              const verifyResponse = await fetch('/api/verify-payment', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  razorpay_order_id: response.razorpay_order_id,
-                  razorpay_payment_id: response.razorpay_payment_id,
-                  razorpay_signature: response.razorpay_signature,
-                  user_id: user.id,
-                  plan: {
-                    id: selectedPlan.id,
-                    name: selectedPlan.name,
-                    billing_cycle: selectedPlan.billingCycle,
-                    amount: getTotal(),
-                  },
-                }),
-              });
-              // Don't fail if backend verification fails - payment is already saved
-            } catch (verifyErr) {
-              console.warn('Backend verification not available:', verifyErr);
-            }
-
-            // Clear selected plan
-            localStorage.removeItem('growmaxx_plan');
-
-            // Navigate to success
-            navigate('/payment-success', {
-              state: {
-                paymentId: response.razorpay_payment_id,
-                plan: selectedPlan,
-              }
-            });
-          } catch (err) {
-            console.error('Post-payment error:', err);
-            // Still navigate to success since Razorpay confirmed payment
-            navigate('/payment-success', {
-              state: {
-                paymentId: response.razorpay_payment_id,
-                plan: selectedPlan,
-              }
-            });
-          }
-        },
-        prefill: {
-          name: profile?.name || profile?.full_name || '',
-          email: user?.email || '',
-          contact: profile?.phone || '',
-        },
-        notes: {
-          user_id: user.id,
-          plan_id: selectedPlan.id,
-          billing_cycle: selectedPlan.billingCycle,
-          autopay_enabled: autopay && selectedPlan.billingCycle !== 'onetime' ? 'true' : 'false',
-        },
-        theme: {
-          color: '#BFFF00',
-        },
-        modal: {
-          ondismiss: function () {
-            console.log('Razorpay modal dismissed');
-            setIsProcessing(false);
-            setError('Payment cancelled by user');
-          },
-        },
+        status: 'pending',
+        description: `${selectedPlan.name} Plan - ${selectedPlan.billingCycle === 'yearly' ? 'Yearly' : selectedPlan.billingCycle === 'onetime' ? 'One-time' : 'Monthly'}`,
       };
 
-      console.log('Initializing Razorpay instance...');
-      const razorpay = new window.Razorpay(options);
+      // Save payment intent to database
+      const { data: paymentData, error: paymentError } = await supabase
+        .from('payments')
+        .insert({
+          ...paymentIntent,
+          metadata: {
+            user_email: user.email,
+            user_name: profile?.name || profile?.full_name || '',
+            user_phone: profile?.phone || '',
+            autopay_enabled: autopay && selectedPlan.billingCycle !== 'onetime',
+          },
+        })
+        .select()
+        .single();
+
+      if (paymentError) {
+        console.error('Payment intent save error:', paymentError);
+        // Continue anyway - we'll handle it in webhook
+      }
+
+      // Build Razorpay.me payment link with amount and user info
+      const baseLink = 'https://razorpay.me/@gandhiraajanakshaymuthushanka';
+      const amount = getTotal();
       
-      razorpay.on('payment.failed', async function (response) {
-        console.error('Payment failed:', response.error);
-        setError(response.error?.description || 'Payment failed. Please try again.');
-        setIsProcessing(false);
+      // Add amount to payment link
+      const paymentLink = `${baseLink}/${amount}`;
+      
+      // Add user info as query params (Razorpay will prefill if supported)
+      const params = new URLSearchParams({
+        name: profile?.name || profile?.full_name || user.email?.split('@')[0] || 'Customer',
+        email: user.email || '',
+        contact: profile?.phone || '',
+        // Add metadata for webhook tracking
+        notes: JSON.stringify({
+          user_id: user.id,
+          plan_id: selectedPlan.id,
+          billing_cycle: selectedPlan.billingCycle,
+          payment_intent_id: paymentData?.id || null,
+        }),
       });
 
-      console.log('Opening Razorpay checkout modal...');
-      clearTimeout(timeoutId); // Clear timeout since we're opening Razorpay
-      razorpay.open();
+      const finalPaymentLink = `${paymentLink}?${params.toString()}`;
       
-      // If modal doesn't open after 2 seconds, show error
-      setTimeout(() => {
-        if (isProcessing) {
-          console.warn('Razorpay modal may not have opened');
-        }
-      }, 2000);
+      console.log('Redirecting to Razorpay payment link:', finalPaymentLink);
+      
+      // Store payment intent ID in localStorage for webhook matching
+      if (paymentData?.id) {
+        localStorage.setItem('pending_payment_id', paymentData.id);
+        localStorage.setItem('pending_plan', JSON.stringify(selectedPlan));
+      }
+
+      // Redirect to Razorpay payment link
+      window.location.href = finalPaymentLink;
+      
     } catch (err) {
-      console.error('Payment error:', err);
-      clearTimeout(timeoutId);
-      setError(err.message || 'Payment initialization failed. Please try again.');
+      console.error('Payment redirect error:', err);
+      setError(err.message || 'Failed to redirect to payment. Please try again.');
       setIsProcessing(false);
     }
   };
@@ -703,7 +444,7 @@ Please share the payment link.`;
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
                       </svg>
-                      Processing...
+                      Redirecting...
                     </span>
                   ) : (
                     `Pay ₹${getTotal().toLocaleString()}`

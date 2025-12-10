@@ -10,6 +10,7 @@ import Dashboard from "./pages/Dashboard";
 import SelectPlan from "./pages/SelectPlan";
 import Payment from "./pages/Payment";
 import PaymentSuccess from "./pages/PaymentSuccess";
+import PaymentCallback from "./pages/PaymentCallback";
 
 // Protected Route Component
 function ProtectedRoute({ children }) {
@@ -106,6 +107,10 @@ function AppRoutes() {
             <PaymentSuccess />
           </ProtectedRoute>
         } 
+      />
+      <Route 
+        path="/payment-callback" 
+        element={<PaymentCallback />} 
       />
       
       {/* Fallback */}
