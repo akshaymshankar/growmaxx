@@ -77,21 +77,64 @@ export default async function handler(req) {
       const status = paymentEntity?.status;
       const notes = paymentEntity?.notes || {};
       
-      // Extract user info from notes
-      const userId = notes.user_id;
-      const planId = notes.plan_id;
-      const billingCycle = notes.billing_cycle;
-      const paymentIntentId = notes.payment_intent_id;
+      // Try to extract user info from notes (if available)
+      let userId = notes.user_id;
+      let planId = notes.plan_id;
+      let billingCycle = notes.billing_cycle;
+      let paymentIntentId = notes.payment_intent_id;
 
+      // If notes don't have user info, try to match by amount and recent pending payments
       if (!userId || !planId) {
-        console.error('❌ Missing user_id or plan_id in payment notes');
+        console.log('⚠️ No user info in notes, trying to match by amount...');
+        
+        // Find pending payment with matching amount (within last hour)
+        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+        const { data: pendingPayments, error: findError } = await supabase
+          .from('payments')
+          .select('*')
+          .eq('status', 'pending')
+          .eq('amount', amount)
+          .gte('created_at', oneHourAgo)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (findError) {
+          console.error('Error finding pending payment:', findError);
+        } else if (pendingPayments && pendingPayments.length > 0) {
+          const pendingPayment = pendingPayments[0];
+          userId = pendingPayment.user_id;
+          paymentIntentId = pendingPayment.id;
+          
+          // Extract plan info from metadata
+          if (pendingPayment.metadata) {
+            planId = pendingPayment.metadata.plan_id;
+            billingCycle = pendingPayment.metadata.billing_cycle;
+          }
+          
+          console.log('✅ Matched payment by amount:', {
+            paymentIntentId,
+            userId: userId?.substring(0, 8),
+            planId,
+          });
+        }
+      }
+
+      if (!userId) {
+        console.error('❌ Could not determine user_id for payment');
         return {
           statusCode: 400,
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ error: 'Missing user_id or plan_id' }),
+          body: JSON.stringify({ error: 'Could not match payment to user' }),
         };
+      }
+
+      if (!planId) {
+        console.error('❌ Could not determine plan_id for payment');
+        // Continue anyway - we'll use default values
+        planId = 'unknown';
+        billingCycle = 'monthly';
       }
 
       console.log('Processing payment:', {

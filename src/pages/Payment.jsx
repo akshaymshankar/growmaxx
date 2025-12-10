@@ -151,11 +151,15 @@ export default function Payment() {
       };
 
       // Save payment intent to database
+      // Store plan info in metadata for webhook matching
       const { data: paymentData, error: paymentError } = await supabase
         .from('payments')
         .insert({
           ...paymentIntent,
           metadata: {
+            plan_id: selectedPlan.id,
+            plan_name: selectedPlan.name,
+            billing_cycle: selectedPlan.billingCycle,
             user_email: user.email,
             user_name: profile?.name || profile?.full_name || '',
             user_phone: profile?.phone || '',
@@ -170,30 +174,17 @@ export default function Payment() {
         // Continue anyway - we'll handle it in webhook
       }
 
-      // Build Razorpay.me payment link with amount and user info
+      // Build Razorpay.me payment link with amount
+      // Format: https://razorpay.me/@username/amount
       const baseLink = 'https://razorpay.me/@gandhiraajanakshaymuthushanka';
       const amount = getTotal();
       
-      // Add amount to payment link
-      const paymentLink = `${baseLink}/${amount}`;
-      
-      // Add user info as query params (Razorpay will prefill if supported)
-      const params = new URLSearchParams({
-        name: profile?.name || profile?.full_name || user.email?.split('@')[0] || 'Customer',
-        email: user.email || '',
-        contact: profile?.phone || '',
-        // Add metadata for webhook tracking
-        notes: JSON.stringify({
-          user_id: user.id,
-          plan_id: selectedPlan.id,
-          billing_cycle: selectedPlan.billingCycle,
-          payment_intent_id: paymentData?.id || null,
-        }),
-      });
-
-      const finalPaymentLink = `${paymentLink}?${params.toString()}`;
+      // Razorpay.me links don't support query parameters
+      // Just use the amount in the URL path
+      const finalPaymentLink = `${baseLink}/${amount}`;
       
       console.log('Redirecting to Razorpay payment link:', finalPaymentLink);
+      console.log('Payment intent ID for webhook matching:', paymentData?.id);
       
       // Store payment intent ID in localStorage for webhook matching
       if (paymentData?.id) {
