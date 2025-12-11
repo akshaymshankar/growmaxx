@@ -408,13 +408,15 @@ Please share the payment link.`;
                     <div className="pt-6 border-t border-white/[0.04]">
                       <div className="flex items-center justify-between">
                         <div>
-                          <div className="text-white font-medium">Enable Autopay</div>
+                          <div className="text-white font-medium">Enable Autopay (Subscription)</div>
                           <div className="text-sm text-neutral-500">
-                            Automatically renew your subscription
+                            {autopay 
+                              ? 'Automatic monthly/yearly billing via Razorpay Subscriptions'
+                              : 'One-time payment - you\'ll need to pay manually each month'}
                           </div>
                           {autopay && (
                             <div className="text-xs text-lime-400 mt-1">
-                              💡 Enable autopay in your UPI app (GPay/PhonePe) when paying
+                              ✅ Works with UPI Autopay, Cards, and eMandate
                             </div>
                           )}
                         </div>

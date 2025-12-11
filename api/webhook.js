@@ -266,6 +266,86 @@ export default async function handler(req) {
       };
     }
 
+    // Handle subscription events
+    if (event.startsWith('subscription.')) {
+      const subscriptionEntity = payload.payload?.subscription?.entity;
+      const subscriptionId = subscriptionEntity?.id;
+      const subscriptionStatus = subscriptionEntity?.status;
+      const notes = subscriptionEntity?.notes || {};
+      const userId = notes.user_id;
+      const planId = notes.plan_id;
+      const billingCycle = notes.billing_cycle;
+
+      console.log('Subscription event:', event, {
+        subscriptionId,
+        status: subscriptionStatus,
+        userId: userId?.substring(0, 8),
+      });
+
+      if (userId && subscriptionId) {
+        // Update subscription in database
+        const { error: subError } = await supabase
+          .from('subscriptions')
+          .upsert({
+            user_id: userId,
+            razorpay_subscription_id: subscriptionId,
+            plan_id: planId,
+            plan_name: notes.plan_name || 'Plan',
+            billing_cycle: billingCycle,
+            status: subscriptionStatus === 'active' ? 'active' : subscriptionStatus === 'paused' ? 'paused' : 'cancelled',
+            autopay_enabled: true,
+            updated_at: new Date().toISOString(),
+          }, {
+            onConflict: 'user_id',
+          });
+
+        if (subError) {
+          console.error('Subscription update error:', subError);
+        } else {
+          console.log('✅ Subscription updated:', subscriptionStatus);
+        }
+      }
+
+      // Handle subscription.charged event (payment successful)
+      if (event === 'subscription.charged') {
+        const invoice = payload.payload?.invoice?.entity;
+        const paymentId = invoice?.payment_id;
+        const amount = invoice?.amount;
+
+        if (userId && paymentId) {
+          // Create payment record
+          await supabase
+            .from('payments')
+            .insert({
+              user_id: userId,
+              razorpay_payment_id: paymentId,
+              razorpay_subscription_id: subscriptionId,
+              amount: amount,
+              currency: 'INR',
+              status: 'success',
+              payment_method: 'razorpay',
+              description: `Subscription payment - ${notes.plan_name || 'Plan'}`,
+              metadata: {
+                plan_id: planId,
+                billing_cycle: billingCycle,
+                subscription_id: subscriptionId,
+              },
+            });
+        }
+      }
+
+      return {
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          success: true,
+          message: 'Subscription webhook processed'
+        }),
+      };
+    }
+
     // Unknown event - just acknowledge
     console.log('Unknown webhook event:', event);
     return {

@@ -50,3 +50,6 @@ This could be:
 
 **Share the exact error from Supabase logs and we'll fix it!**
 
+
+
+

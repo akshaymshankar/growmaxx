@@ -28,3 +28,6 @@ WHERE trigger_name = 'on_auth_user_created';
 -- Now the frontend code will create profiles when users sign in.
 -- This eliminates the 500 error completely.
 
+
+
+

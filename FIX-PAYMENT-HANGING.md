@@ -152,3 +152,6 @@ Share these details:
 2. Vercel function logs (copy/paste)
 3. Response from curl test (if you ran it)
 
+
+
+

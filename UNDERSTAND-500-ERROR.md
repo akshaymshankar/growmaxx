@@ -31,3 +31,6 @@ We need to make the trigger function:
 
 Let me create a bulletproof trigger that works in real-time.
 
+
+
+

@@ -137,3 +137,6 @@ If issues persist:
 2. Check Supabase logs: Dashboard → Logs
 3. Check browser console for frontend errors
 
+
+
+

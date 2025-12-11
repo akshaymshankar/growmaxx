@@ -98,3 +98,6 @@ Share these details:
 2. Network tab - request/response (screenshot)
 3. Vercel function logs (copy/paste)
 
+
+
+

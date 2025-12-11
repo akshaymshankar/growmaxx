@@ -169,3 +169,6 @@ Use Supabase's built-in phone authentication
 4. **Test Reactivation:** Make payment and verify website reactivates
 5. **Deploy:** Push to production
 
+
+
+

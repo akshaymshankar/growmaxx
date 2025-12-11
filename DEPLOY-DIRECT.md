@@ -46,3 +46,6 @@ Your app will be live at: `https://growmaxx.vercel.app` (or your project name)
 **Note:** You can still push to GitHub later if you want. The GitHub push protection is just a security feature - you can allow those secrets since they're in server-side code.
 
 
+
+
+

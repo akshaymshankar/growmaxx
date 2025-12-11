@@ -61,3 +61,6 @@ All dashboard data (profile, subscription, payments) is saved to Supabase automa
 
 No extra steps needed!
 
+
+
+

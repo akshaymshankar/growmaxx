@@ -207,3 +207,6 @@ ORDER BY u.created_at DESC;
 
 All fixes are in place. The main thing left is running the database SQL and disabling email confirmation.
 
+
+
+

@@ -38,3 +38,6 @@ WHERE tablename = 'profiles';
 -- If all these return empty or normal results,
 -- the issue is likely in Supabase's OAuth processing itself.
 
+
+
+

@@ -49,3 +49,6 @@ The 500 error happens **before** it reaches the database:
 
 **Check Auth Logs and API Logs** - that's where the 500 error will be!
 
+
+
+

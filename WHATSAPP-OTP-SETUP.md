@@ -52,3 +52,6 @@ SUPABASE_URL=your_url
 SUPABASE_ANON_KEY=your_key
 ```
 
+
+
+
