@@ -19,58 +19,49 @@ export function AuthProvider({ children }) {
         console.warn('Auth loading timeout - proceeding anyway');
         setLoading(false);
       }
-    }, 5000); // 5 second timeout
+    }, 3000); // 3 second timeout (faster for returning users)
     
-    // Get initial session - check multiple times to catch OAuth callback
+    // Get initial session - fast check for returning users
     const checkSession = async () => {
-      let attempts = 0;
-      const maxAttempts = 5;
-      
-      while (attempts < maxAttempts) {
-        attempts++;
-        
+      try {
         const { data: { session }, error } = await supabase.auth.getSession();
         
         if (!mounted) return;
         
         if (error) {
           console.error('Session error:', error);
-          if (attempts === maxAttempts) {
-            clearTimeout(timeoutId);
-            setLoading(false);
-          }
-          continue;
+          clearTimeout(timeoutId);
+          setLoading(false);
+          return;
         }
         
         if (session?.user) {
           clearTimeout(timeoutId);
           setUser(session.user);
-          loadProfile(session.user.id).finally(() => {
+          // Load profile in background - don't block loading
+          loadProfile(session.user.id).catch(err => {
+            console.error('Profile load error:', err);
+          }).finally(() => {
             if (mounted) setLoading(false);
           });
           return;
         }
         
-        // Wait before next attempt
-        if (attempts < maxAttempts) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+        // No session found
+        if (mounted) {
+          clearTimeout(timeoutId);
+          setLoading(false);
         }
-      }
-      
-      // No session found after all attempts
-      if (mounted) {
-        clearTimeout(timeoutId);
-        setLoading(false);
+      } catch (err) {
+        console.error('Session fetch error:', err);
+        if (mounted) {
+          clearTimeout(timeoutId);
+          setLoading(false);
+        }
       }
     };
     
-    checkSession().catch((err) => {
-      console.error('Session fetch error:', err);
-      if (mounted) {
-        clearTimeout(timeoutId);
-        setLoading(false);
-      }
-    });
+    checkSession();
 
     // Listen for auth changes
     const {

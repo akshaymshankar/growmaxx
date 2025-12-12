@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    GROWMAXX LANDING PAGE
@@ -24,6 +25,33 @@ const PAYMENT_LINKS = {
 
 export default function LandingPage() {
   console.log('🏠 LandingPage component rendering...');
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
+  
+  // Redirect logged-in users to dashboard
+  useEffect(() => {
+    if (!loading && user) {
+      console.log('User already logged in, redirecting to dashboard...');
+      navigate('/dashboard', { replace: true });
+    }
+  }, [user, loading, navigate]);
+  
+  // Show loading while checking auth
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin w-8 h-8 border-2 border-lime-400 border-t-transparent rounded-full mx-auto mb-4" />
+          <p className="text-neutral-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // Don't render landing page if user is logged in (will redirect)
+  if (user) {
+    return null;
+  }
   
   return (
     <div className="relative min-h-screen bg-[#050505]">
