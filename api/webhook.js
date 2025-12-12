@@ -430,6 +430,59 @@ export default async function handler(req) {
                 subscription_id: subscriptionId,
               },
             });
+
+          // Ensure website is active after successful payment
+          const { data: websites } = await supabase
+            .from('websites')
+            .select('*')
+            .eq('user_id', userId);
+
+          if (websites && websites.length > 0) {
+            for (const website of websites) {
+              if (website.status === 'suspended') {
+                await supabase
+                  .from('websites')
+                  .update({ 
+                    status: 'live',
+                    suspended_at: null,
+                    suspension_reason: null,
+                    reactivated_at: new Date().toISOString(),
+                  })
+                  .eq('id', website.id);
+                console.log(`✅ Website reactivated after payment: ${website.site_url || website.id}`);
+              }
+            }
+          }
+        }
+      }
+
+      // Handle subscription payment failure
+      if (event === 'invoice.payment_failed' || event === 'subscription.pending') {
+        console.log('⚠️ Subscription payment failed - Deactivating website...');
+        
+        if (userId) {
+          // Find all websites for this user
+          const { data: websites } = await supabase
+            .from('websites')
+            .select('*')
+            .eq('user_id', userId);
+
+          if (websites && websites.length > 0) {
+            // Deactivate all websites
+            for (const website of websites) {
+              if (website.status === 'live' || website.status === 'active') {
+                await supabase
+                  .from('websites')
+                  .update({ 
+                    status: 'suspended',
+                    suspended_at: new Date().toISOString(),
+                    suspension_reason: 'Payment failed',
+                  })
+                  .eq('id', website.id);
+                console.log(`🛑 Website deactivated due to payment failure: ${website.site_url || website.id}`);
+              }
+            }
+          }
         }
       }
 
@@ -441,6 +494,58 @@ export default async function handler(req) {
         body: JSON.stringify({ 
           success: true,
           message: 'Subscription webhook processed'
+        }),
+      };
+    }
+
+    // Handle invoice.payment_failed event (outside subscription block)
+    if (event === 'invoice.payment_failed') {
+      const invoice = payload.payload?.invoice?.entity;
+      const subscriptionId = invoice?.subscription_id;
+      
+      // Try to get user_id from subscription
+      if (subscriptionId) {
+        const { data: subscription } = await supabase
+          .from('subscriptions')
+          .select('user_id')
+          .eq('razorpay_subscription_id', subscriptionId)
+          .maybeSingle();
+
+        if (subscription?.user_id) {
+          console.log('⚠️ Payment failed - Deactivating website...');
+          
+          // Deactivate all websites for this user
+          const { data: websites } = await supabase
+            .from('websites')
+            .select('*')
+            .eq('user_id', subscription.user_id);
+
+          if (websites && websites.length > 0) {
+            for (const website of websites) {
+              if (website.status === 'live' || website.status === 'active') {
+                await supabase
+                  .from('websites')
+                  .update({ 
+                    status: 'suspended',
+                    suspended_at: new Date().toISOString(),
+                    suspension_reason: 'Payment failed',
+                  })
+                  .eq('id', website.id);
+                console.log(`🛑 Website deactivated: ${website.site_url || website.id}`);
+              }
+            }
+          }
+        }
+      }
+
+      return {
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          success: true,
+          message: 'Payment failure webhook processed'
         }),
       };
     }
