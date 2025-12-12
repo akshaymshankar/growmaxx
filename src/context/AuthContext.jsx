@@ -12,14 +12,16 @@ export function AuthProvider({ children }) {
   // Initialize auth state
   useEffect(() => {
     let mounted = true;
+    let loadingSet = false; // Track if we've already set loading to false
     
     // Timeout fallback - ensure loading doesn't hang forever
     const timeoutId = setTimeout(() => {
-      if (mounted) {
+      if (mounted && !loadingSet) {
         console.warn('Auth loading timeout - proceeding anyway');
         setLoading(false);
+        loadingSet = true;
       }
-    }, 3000); // 3 second timeout (faster for returning users)
+    }, 2000); // 2 second timeout (faster)
     
     // Get initial session - fast check for returning users
     const checkSession = async () => {
@@ -30,81 +32,109 @@ export function AuthProvider({ children }) {
         
         if (error) {
           console.error('Session error:', error);
-          clearTimeout(timeoutId);
-          setLoading(false);
+          if (!loadingSet) {
+            clearTimeout(timeoutId);
+            setLoading(false);
+            loadingSet = true;
+          }
           return;
         }
         
         if (session?.user) {
           clearTimeout(timeoutId);
           setUser(session.user);
+          
           // Load profile in background - don't block loading
-          loadProfile(session.user.id).catch(err => {
-            console.error('Profile load error:', err);
-          }).finally(() => {
-            if (mounted) setLoading(false);
-          });
+          loadProfile(session.user.id)
+            .catch(err => {
+              console.error('Profile load error:', err);
+            })
+            .finally(() => {
+              if (mounted && !loadingSet) {
+                setLoading(false);
+                loadingSet = true;
+              }
+            });
           return;
         }
         
         // No session found
-        if (mounted) {
+        if (mounted && !loadingSet) {
           clearTimeout(timeoutId);
           setLoading(false);
+          loadingSet = true;
         }
       } catch (err) {
         console.error('Session fetch error:', err);
-        if (mounted) {
+        if (mounted && !loadingSet) {
           clearTimeout(timeoutId);
           setLoading(false);
+          loadingSet = true;
         }
       }
     };
     
     checkSession();
 
-    // Listen for auth changes
+    // Listen for auth changes (only for new sign-ins, not initial load)
+    let authChangeHandled = false;
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
       
+      // Skip initial SIGNED_IN event if we already handled session
+      if (event === 'SIGNED_IN' && authChangeHandled) {
+        return;
+      }
+      
       clearTimeout(timeoutId);
+      authChangeHandled = true;
       
       if (session?.user) {
         setUser(session.user);
         
         // Load profile
-        loadProfile(session.user.id).finally(() => {
-          setLoading(false);
-        });
+        loadProfile(session.user.id)
+          .catch(err => {
+            console.error('Profile load error:', err);
+          })
+          .finally(() => {
+            if (mounted && !loadingSet) {
+              setLoading(false);
+              loadingSet = true;
+            }
+          });
         
-        // Create profile if it doesn't exist (simple, no complex logic)
-        const userId = session.user.id;
-        const userName = session.user.user_metadata?.name || 
-                        session.user.user_metadata?.full_name ||
-                        session.user.email?.split('@')[0] || 
-                        'User';
-        
-        // Simple insert with ON CONFLICT handling in database
-        // Use try-catch instead of .catch() since insert() returns a query builder
-        try {
-          const { error } = await supabase
-            .from('profiles')
-            .insert({ id: userId, name: userName });
+        // Create profile if it doesn't exist (only on new sign-in)
+        if (event === 'SIGNED_IN') {
+          const userId = session.user.id;
+          const userName = session.user.user_metadata?.name || 
+                          session.user.user_metadata?.full_name ||
+                          session.user.email?.split('@')[0] || 
+                          'User';
           
-          // Ignore duplicate key errors (profile already exists)
-          if (error && error.code !== '23505') {
-            console.log('Profile creation note:', error.message);
+          try {
+            const { error } = await supabase
+              .from('profiles')
+              .insert({ id: userId, name: userName });
+            
+            // Ignore duplicate key errors (profile already exists)
+            if (error && error.code !== '23505') {
+              console.log('Profile creation note:', error.message);
+            }
+          } catch (err) {
+            // Silently ignore - profile might already exist
+            console.log('Profile creation skipped:', err);
           }
-        } catch (err) {
-          // Silently ignore - profile might already exist
-          console.log('Profile creation skipped:', err);
         }
       } else {
         setUser(null);
         setProfile(null);
-        setLoading(false);
+        if (!loadingSet) {
+          setLoading(false);
+          loadingSet = true;
+        }
       }
     });
 
