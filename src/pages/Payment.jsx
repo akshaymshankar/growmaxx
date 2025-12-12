@@ -174,20 +174,85 @@ export default function Payment() {
         // Continue anyway - we'll handle it in webhook
       }
 
-      // Create Razorpay Payment Link via API to preload amount
-      // razorpay.me/@username doesn't support amount in URL, so we use Payment Links API
       const amount = getTotal();
       
-      console.log('Creating payment link with amount:', amount);
+      // If autopay is enabled and not one-time, use Razorpay Subscriptions (AUTOPAY)
+      if (autopay && selectedPlan.billingCycle !== 'onetime') {
+        console.log('🔄 Creating Razorpay Subscription with Autopay...');
+        
+        // Call API to create subscription
+        const apiUrl = import.meta.env.PROD 
+          ? `${window.location.origin}/api/create-subscription`
+          : '/api/create-subscription';
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        
+        try {
+          const subResponse = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              plan_id: selectedPlan.id,
+              plan_name: selectedPlan.name,
+              amount: amount,
+              billing_cycle: selectedPlan.billingCycle,
+              user_id: user.id,
+              user_email: user.email,
+              user_name: profile?.name || profile?.full_name || '',
+              user_phone: profile?.phone || '',
+            }),
+            signal: controller.signal,
+          });
+          
+          clearTimeout(timeoutId);
+
+          if (!subResponse.ok) {
+            const errorText = await subResponse.text();
+            console.error('❌ Subscription creation failed:', errorText);
+            throw new Error('Failed to create subscription. Please try again.');
+          }
+
+          const subData = await subResponse.json();
+          
+          if (!subData || !subData.short_url) {
+            console.error('❌ Invalid subscription response:', subData);
+            throw new Error('Invalid response from payment server.');
+          }
+
+          console.log('✅ Razorpay Subscription created:', subData.subscription_id);
+          console.log('🔗 Subscription URL:', subData.short_url);
+          
+          // Store subscription info
+          if (paymentData?.id) {
+            localStorage.setItem('pending_payment_id', paymentData.id);
+            localStorage.setItem('pending_plan', JSON.stringify(selectedPlan));
+            localStorage.setItem('subscription_id', subData.subscription_id);
+          }
+
+          // Redirect to subscription authorization page (user will authorize autopay)
+          window.location.href = subData.short_url;
+          return;
+        } catch (subError) {
+          clearTimeout(timeoutId);
+          console.error('❌ Subscription creation error:', subError);
+          setError('Failed to create subscription. Falling back to one-time payment.');
+          // Fall through to payment link fallback
+        }
+      }
+      
+      // Fallback: Use Payment Link (one-time payment or if subscription fails)
+      console.log('💳 Creating one-time Payment Link...');
       
       // Call API to create payment link with preloaded amount
       const apiUrl = import.meta.env.PROD 
         ? `${window.location.origin}/api/create-payment-link`
         : '/api/create-payment-link';
       
-      // Add timeout to prevent hanging
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
       
       try {
         const linkResponse = await fetch(apiUrl, {
