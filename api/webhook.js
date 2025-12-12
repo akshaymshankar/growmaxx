@@ -219,6 +219,29 @@ export default async function handler(req) {
           console.error('Subscription error:', subError);
         } else {
           console.log('✅ Subscription created/updated');
+          
+          // Activate website when subscription is created/updated
+          const { data: websites } = await supabase
+            .from('websites')
+            .select('*')
+            .eq('user_id', userId);
+
+          if (websites && websites.length > 0) {
+            for (const website of websites) {
+              if (website.status === 'suspended') {
+                await supabase
+                  .from('websites')
+                  .update({ 
+                    status: 'live',
+                    suspended_at: null,
+                    suspension_reason: null,
+                    reactivated_at: new Date().toISOString(),
+                  })
+                  .eq('id', website.id);
+                console.log(`✅ Website activated after subscription: ${website.site_url || website.id}`);
+              }
+            }
+          }
         }
       }
 
@@ -283,6 +306,14 @@ export default async function handler(req) {
       });
 
       if (userId && subscriptionId) {
+        // Determine subscription status
+        let dbStatus = 'active';
+        if (subscriptionStatus === 'cancelled' || subscriptionStatus === 'completed' || subscriptionStatus === 'expired') {
+          dbStatus = 'cancelled';
+        } else if (subscriptionStatus === 'paused' || subscriptionStatus === 'halted') {
+          dbStatus = 'paused';
+        }
+        
         // Update subscription in database
         const { error: subError } = await supabase
           .from('subscriptions')
@@ -292,7 +323,7 @@ export default async function handler(req) {
             plan_id: planId,
             plan_name: notes.plan_name || 'Plan',
             billing_cycle: billingCycle,
-            status: subscriptionStatus === 'active' ? 'active' : subscriptionStatus === 'paused' ? 'paused' : 'cancelled',
+            status: dbStatus,
             autopay_enabled: true,
             updated_at: new Date().toISOString(),
           }, {
@@ -302,7 +333,75 @@ export default async function handler(req) {
         if (subError) {
           console.error('Subscription update error:', subError);
         } else {
-          console.log('✅ Subscription updated:', subscriptionStatus);
+          console.log('✅ Subscription updated:', dbStatus);
+        }
+
+        // AUTOMATIC WEBSITE DEACTIVATION/ACTIVATION
+        // If subscription is cancelled/paused/expired → Deactivate website
+        // If subscription is active → Activate website
+        if (dbStatus === 'cancelled' || dbStatus === 'paused') {
+          console.log('🛑 Subscription cancelled/paused - Deactivating website...');
+          
+          // Find all websites for this user
+          const { data: websites, error: websitesError } = await supabase
+            .from('websites')
+            .select('*')
+            .eq('user_id', userId);
+
+          if (!websitesError && websites && websites.length > 0) {
+            // Deactivate all websites
+            for (const website of websites) {
+              if (website.status === 'live' || website.status === 'active') {
+                const { error: updateError } = await supabase
+                  .from('websites')
+                  .update({ 
+                    status: 'suspended',
+                    suspended_at: new Date().toISOString(),
+                    suspension_reason: `Subscription ${dbStatus === 'cancelled' ? 'cancelled' : 'paused'}`,
+                  })
+                  .eq('id', website.id);
+
+                if (updateError) {
+                  console.error('Website deactivation error:', updateError);
+                } else {
+                  console.log(`✅ Website deactivated: ${website.site_url || website.id}`);
+                }
+              }
+            }
+          }
+        } else if (dbStatus === 'active') {
+          console.log('✅ Subscription active - Activating website...');
+          
+          // Find all websites for this user
+          const { data: websites, error: websitesError } = await supabase
+            .from('websites')
+            .select('*')
+            .eq('user_id', userId);
+
+          if (!websitesError && websites && websites.length > 0) {
+            // Activate websites that were suspended due to subscription
+            for (const website of websites) {
+              if (website.status === 'suspended' && 
+                  (website.suspension_reason?.includes('Subscription') || 
+                   website.suspension_reason?.includes('subscription'))) {
+                const { error: updateError } = await supabase
+                  .from('websites')
+                  .update({ 
+                    status: 'live',
+                    suspended_at: null,
+                    suspension_reason: null,
+                    reactivated_at: new Date().toISOString(),
+                  })
+                  .eq('id', website.id);
+
+                if (updateError) {
+                  console.error('Website activation error:', updateError);
+                } else {
+                  console.log(`✅ Website reactivated: ${website.site_url || website.id}`);
+                }
+              }
+            }
+          }
         }
       }
 
