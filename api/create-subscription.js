@@ -96,8 +96,7 @@ export default async function handler(req) {
       },
     };
 
-    // If plan_id doesn't exist, we need to create a plan first
-    // For now, let's create subscription with inline plan details
+    // Create subscription with inline plan details + customer for UPI Autopay/Card mandates
     const subscriptionWithPlan = {
       plan: {
         period: interval,
@@ -109,13 +108,22 @@ export default async function handler(req) {
           description: `${plan_name} Plan - ${billing_cycle === 'yearly' ? 'Yearly' : 'Monthly'}`,
         },
       },
+      // Customer details required for UPI Autopay and Card mandates
+      customer: {
+        name: user_name || 'Customer',
+        email: user_email || '',
+        contact: user_phone || '',
+      },
       customer_notify: 1,
-      total_count: billing_cycle === 'yearly' ? 12 : 999,
-      start_at: Math.floor(Date.now() / 1000) + 60,
+      total_count: billing_cycle === 'yearly' ? 12 : 999, // 999 = infinite for monthly
+      start_at: Math.floor(Date.now() / 1000) + 60, // Start in 1 minute
+      // Enable payment methods for autopay
+      offer_id: null, // Optional: add offer if available
       notes: {
         user_id,
         plan_name,
         billing_cycle,
+        autopay_enabled: 'true',
       },
     };
 

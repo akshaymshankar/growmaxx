@@ -487,7 +487,12 @@ Please share the payment link.`;
                                   <div>✅ First payment charged today</div>
                                   <div>✅ Auto-renews on {new Date(Date.now() + (selectedPlan.billingCycle === 'yearly' ? 365 : 30) * 24 * 60 * 60 * 1000).toLocaleDateString()}</div>
                                   <div>✅ Cancel anytime from your dashboard</div>
-                                  <div>✅ Works with UPI Autopay, Cards, and eMandate</div>
+                                  <div className="font-semibold mt-2">💳 Payment Methods:</div>
+                                  <div>• UPI Autopay - Set up mandate in GPay/PhonePe</div>
+                                  <div>• Card Autopay - Authorize once, auto-debit monthly</div>
+                                  <div className="text-neutral-300 mt-2 text-[10px]">
+                                    You'll authorize automatic debits during payment setup
+                                  </div>
                                 </div>
                               </>
                             ) : (
