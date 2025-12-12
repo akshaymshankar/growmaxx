@@ -468,22 +468,45 @@ Please share the payment link.`;
                     </p>
                   </div>
 
-                  {/* Autopay Toggle */}
+                  {/* Netflix-Style Subscription Info */}
                   {selectedPlan.billingCycle !== 'onetime' && (
                     <div className="pt-6 border-t border-white/[0.04]">
+                      <div className="bg-lime-400/10 border border-lime-400/20 rounded-xl p-4 mb-4">
+                        <div className="flex items-start gap-3">
+                          <div className="text-2xl">🔄</div>
+                          <div className="flex-1">
+                            <div className="text-white font-semibold mb-1">
+                              {autopay ? 'Automatic Subscription' : 'One-Time Payment'}
+                            </div>
+                            {autopay ? (
+                              <>
+                                <div className="text-sm text-neutral-300 mb-2">
+                                  Your subscription will automatically renew every {selectedPlan.billingCycle === 'yearly' ? 'year' : 'month'}.
+                                </div>
+                                <div className="text-xs text-lime-400 space-y-1">
+                                  <div>✅ First payment charged today</div>
+                                  <div>✅ Auto-renews on {new Date(Date.now() + (selectedPlan.billingCycle === 'yearly' ? 365 : 30) * 24 * 60 * 60 * 1000).toLocaleDateString()}</div>
+                                  <div>✅ Cancel anytime from your dashboard</div>
+                                  <div>✅ Works with UPI Autopay, Cards, and eMandate</div>
+                                </div>
+                              </>
+                            ) : (
+                              <div className="text-sm text-neutral-300">
+                                You'll need to manually pay each {selectedPlan.billingCycle === 'yearly' ? 'year' : 'month'} to continue service.
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      
                       <div className="flex items-center justify-between">
                         <div>
-                          <div className="text-white font-medium">Enable Autopay (Subscription)</div>
+                          <div className="text-white font-medium">Enable Auto-Renewal</div>
                           <div className="text-sm text-neutral-500">
                             {autopay 
-                              ? 'Automatic monthly/yearly billing via Razorpay Subscriptions'
-                              : 'One-time payment - you\'ll need to pay manually each month'}
+                              ? 'Automatic billing enabled - like Netflix'
+                              : 'Manual payment required each billing cycle'}
                           </div>
-                          {autopay && (
-                            <div className="text-xs text-lime-400 mt-1">
-                              ✅ Works with UPI Autopay, Cards, and eMandate
-                            </div>
-                          )}
                         </div>
                         <button
                           onClick={() => setAutopay(!autopay)}

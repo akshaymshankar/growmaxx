@@ -342,33 +342,131 @@ function OverviewTab({ subscription, website }) {
 
 // Billing Tab
 function BillingTab({ subscription, payments, navigate }) {
+  const [cancelling, setCancelling] = useState(false);
+  const { user } = useAuth();
+
+  const handleCancelSubscription = async () => {
+    if (!confirm('Are you sure you want to cancel your subscription? Your website will be deactivated.')) {
+      return;
+    }
+
+    setCancelling(true);
+    try {
+      // Cancel subscription via Razorpay API
+      if (subscription.razorpay_subscription_id) {
+        const response = await fetch('/api/cancel-subscription', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            subscription_id: subscription.razorpay_subscription_id,
+            user_id: user.id,
+          }),
+        });
+
+        if (response.ok) {
+          alert('Subscription cancelled. Your website will be deactivated at the end of the billing period.');
+          window.location.reload();
+        } else {
+          throw new Error('Failed to cancel subscription');
+        }
+      } else {
+        // If no Razorpay subscription ID, just update database
+        await supabase
+          .from('subscriptions')
+          .update({ status: 'cancelled' })
+          .eq('user_id', user.id);
+        
+        alert('Subscription cancelled. Your website will be deactivated.');
+        window.location.reload();
+      }
+    } catch (error) {
+      console.error('Cancel subscription error:', error);
+      alert('Failed to cancel subscription. Please contact support.');
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      {/* Current Plan */}
+      {/* Current Plan - Netflix Style */}
       {subscription && (
         <div className="bg-[#0A0A0A] border border-white/[0.04] rounded-2xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-white">Current Plan</h3>
-            <Link to="/select-plan" className="text-sm text-lime-400 hover:underline">
-              Change Plan
-            </Link>
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="font-bold text-white text-xl mb-1">{subscription.plan_name} Plan</h3>
+              <p className="text-sm text-neutral-400">Active Subscription</p>
+            </div>
+            {subscription.status === 'active' && (
+              <span className="px-4 py-2 bg-lime-400/10 text-lime-400 rounded-full text-sm font-medium">
+                Active
+              </span>
+            )}
           </div>
-          <div className="grid md:grid-cols-3 gap-4">
-            <div>
-              <div className="text-sm text-neutral-500 mb-1">Plan</div>
-              <div className="text-white font-medium">{subscription.plan_name}</div>
-            </div>
-            <div>
-              <div className="text-sm text-neutral-500 mb-1">Amount</div>
-              <div className="text-white font-medium">₹{subscription.amount}/mo</div>
-            </div>
-            <div>
-              <div className="text-sm text-neutral-500 mb-1">Autopay</div>
-              <div className={`font-medium ${subscription.autopay_enabled ? 'text-lime-400' : 'text-neutral-400'}`}>
-                {subscription.autopay_enabled ? 'Enabled' : 'Disabled'}
+          
+          <div className="grid md:grid-cols-2 gap-6 mb-6">
+            <div className="bg-[#111] rounded-xl p-4">
+              <div className="text-sm text-neutral-500 mb-1">Billing Amount</div>
+              <div className="text-2xl font-bold text-white">₹{subscription.amount}</div>
+              <div className="text-xs text-neutral-400 mt-1">
+                per {subscription.billing_cycle === 'yearly' ? 'year' : 'month'}
               </div>
             </div>
+            <div className="bg-[#111] rounded-xl p-4">
+              <div className="text-sm text-neutral-500 mb-1">Next Billing Date</div>
+              {subscription.next_billing_date ? (
+                <>
+                  <div className="text-xl font-bold text-white">
+                    {new Date(subscription.next_billing_date).toLocaleDateString('en-IN', {
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric'
+                    })}
+                  </div>
+                  <div className="text-xs text-neutral-400 mt-1">
+                    Auto-renewal {subscription.autopay_enabled ? 'enabled' : 'disabled'}
+                  </div>
+                </>
+              ) : (
+                <div className="text-neutral-400">Not scheduled</div>
+              )}
+            </div>
           </div>
+
+          <div className="flex items-center justify-between pt-4 border-t border-white/[0.04]">
+            <div>
+              <div className="text-sm text-neutral-500 mb-1">Auto-Renewal</div>
+              <div className={`font-medium ${subscription.autopay_enabled ? 'text-lime-400' : 'text-neutral-400'}`}>
+                {subscription.autopay_enabled ? '✅ Enabled' : '❌ Disabled'}
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <Link 
+                to="/select-plan" 
+                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-sm transition-colors"
+              >
+                Change Plan
+              </Link>
+              {subscription.status === 'active' && (
+                <button
+                  onClick={handleCancelSubscription}
+                  disabled={cancelling}
+                  className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm transition-colors disabled:opacity-50"
+                >
+                  {cancelling ? 'Cancelling...' : 'Cancel Subscription'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {subscription.autopay_enabled && (
+            <div className="mt-4 p-3 bg-lime-400/10 border border-lime-400/20 rounded-lg">
+              <div className="text-xs text-lime-400">
+                🔄 Your subscription will automatically renew on {subscription.next_billing_date ? new Date(subscription.next_billing_date).toLocaleDateString() : 'the next billing date'}. 
+                You can cancel anytime before then.
+              </div>
+            </div>
+          )}
         </div>
       )}
 
