@@ -181,9 +181,9 @@ export default function Payment() {
         console.log('🔄 Creating Razorpay Subscription with Autopay...');
         
         // Call API to create subscription
-        const apiUrl = import.meta.env.PROD 
+        const apiUrl = import.meta.env.VITE_API_URL || (import.meta.env.PROD 
           ? `${window.location.origin}/api/create-subscription`
-          : '/api/create-subscription';
+          : '/api/create-subscription');
         
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -247,9 +247,9 @@ export default function Payment() {
       console.log('💳 Creating one-time Payment Link...');
       
       // Call API to create payment link with preloaded amount
-      const apiUrl = import.meta.env.PROD 
+      const apiUrl = import.meta.env.VITE_API_URL || (import.meta.env.PROD 
         ? `${window.location.origin}/api/create-payment-link`
-        : '/api/create-payment-link';
+        : '/api/create-payment-link');
       
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000);
