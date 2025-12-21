@@ -1399,13 +1399,19 @@ if (NODE_ENV === 'production') {
   
   // Serve index.html for all routes (SPA routing)
   // This must be AFTER all API routes
-  // Express 5 requires '/*' instead of '*' for wildcard routes
-  app.get('/*', (req, res) => {
+  // Express 5: Use app.use() with a function instead of wildcard pattern
+  app.use((req, res, next) => {
     // Skip API routes (should be handled by API routes above)
     if (req.path.startsWith('/api/')) {
-      return res.status(404).json({ error: 'API route not found' });
+      return next(); // Let Express handle 404 for API routes
     }
     
+    // Skip static file requests (already handled by express.static)
+    if (req.path.includes('.')) {
+      return next(); // Let Express handle static files
+    }
+    
+    // Serve index.html for all other routes (SPA routing)
     try {
       const indexPath = join(distPath, 'index.html');
       
