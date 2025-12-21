@@ -206,3 +206,26 @@ body {
   opacity: 0.02;
   pointer-events: none;
 }
+
+/* ===== SCROLLING ANIMATION - Infinite Loop (Circular Queue) ===== */
+@keyframes scroll-infinite {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    /* Move exactly 50% (half the width) since we have 2 identical sets */
+    /* When it reaches 50%, it loops back to 0% seamlessly */
+    transform: translateX(-50%);
+  }
+}
+
+.animate-scroll-infinite {
+  animation: scroll-infinite 30s linear infinite;
+  display: flex;
+  width: fit-content;
+  will-change: transform;
+}
+
+.animate-scroll-infinite:hover {
+  animation-play-state: paused;
+}
