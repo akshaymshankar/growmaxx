@@ -1399,7 +1399,8 @@ if (NODE_ENV === 'production') {
   
   // Serve index.html for all routes (SPA routing)
   // This must be AFTER all API routes
-  app.get('*', (req, res) => {
+  // Express 5 requires '/*' instead of '*' for wildcard routes
+  app.get('/*', (req, res) => {
     // Skip API routes (should be handled by API routes above)
     if (req.path.startsWith('/api/')) {
       return res.status(404).json({ error: 'API route not found' });
