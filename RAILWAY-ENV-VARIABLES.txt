@@ -1,0 +1,67 @@
+# ============================================
+# RAILWAY ENVIRONMENT VARIABLES
+# Copy these to Railway → Your Project → Variables Tab
+# ============================================
+
+# ============================================
+# REQUIRED: Node & Server
+# ============================================
+NODE_ENV=production
+PORT=3000
+
+# ============================================
+# REQUIRED: Frontend URL
+# ============================================
+# UPDATE THIS after Railway deployment:
+# 1. First: Use Railway domain (e.g., https://your-app.up.railway.app)
+# 2. Later: Update to https://growmaxx.in
+FRONTEND_URL=https://your-app.up.railway.app
+
+# ============================================
+# REQUIRED: Razorpay
+# ============================================
+RAZORPAY_KEY_ID=rzp_live_RpPJAYduTK0PS7
+RAZORPAY_KEY_SECRET=7CjgSBmlW2rhdtWKrcJ4fH75
+
+# IMPORTANT: Update this after setting webhook in Razorpay
+# 1. Go to Razorpay Dashboard → Settings → Webhooks
+# 2. Create webhook URL: https://your-app.up.railway.app/api/webhook
+# 3. Copy the webhook secret (starts with whsec_)
+# 4. Update this value
+RAZORPAY_WEBHOOK_SECRET=AKShayMuthuSha@nkar1!2@3#4$5%6
+
+# ============================================
+# REQUIRED: Supabase
+# ============================================
+SUPABASE_URL=https://qrwsqjztooxeziqfrmjx.supabase.co
+SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFyd3Nxanp0b294ZXppcWZybWp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyNTY2MTEsImV4cCI6MjA4MDgzMjYxMX0.woX1RFTOnSN-JRdObGWsrvhCpLBNRcA4m7TTLUdvy0A
+
+# IMPORTANT: Get this from Supabase Dashboard
+# Go to: Supabase Dashboard → Settings → API → service_role key
+# This is needed for webhooks to update database
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here
+
+# ============================================
+# OPTIONAL: Email (Resend)
+# ============================================
+# Get from resend.com dashboard (if you set it up)
+RESEND_API_KEY=re_xxxxx
+
+# ============================================
+# OPTIONAL: OTP Services
+# ============================================
+GREEN_API_ID_INSTANCE=7105416689
+GREEN_API_TOKEN=e7dfed4e95dc44ddbea1ca75c547c3a4ea8eb608929042ec86
+
+# ============================================
+# INSTRUCTIONS
+# ============================================
+#
+# 1. Copy each variable above to Railway
+# 2. Remove quotes if present (Railway doesn't need them)
+# 3. After Railway deployment:
+#    a. Update FRONTEND_URL to Railway domain
+#    b. Update RAZORPAY_WEBHOOK_SECRET (after setting webhook)
+#    c. Add SUPABASE_SERVICE_ROLE_KEY (get from Supabase)
+#
+# ============================================

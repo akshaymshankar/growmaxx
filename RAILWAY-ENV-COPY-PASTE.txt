@@ -1,0 +1,46 @@
+# ============================================
+# COPY-PASTE THESE TO RAILWAY
+# Railway → Your Project → Variables Tab
+# ============================================
+# 
+# Instructions:
+# 1. Copy each line below (without the # comments)
+# 2. Paste into Railway Variables tab
+# 3. Remove quotes if present
+# 4. After deployment, update FRONTEND_URL and RAZORPAY_WEBHOOK_SECRET
+# ============================================
+
+NODE_ENV=production
+PORT=3000
+FRONTEND_URL=https://your-app.up.railway.app
+RAZORPAY_KEY_ID=rzp_live_RpPJAYduTK0PS7
+RAZORPAY_KEY_SECRET=7CjgSBmlW2rhdtWKrcJ4fH75
+RAZORPAY_WEBHOOK_SECRET=AKShayMuthuSha@nkar1!2@3#4$5%6
+SUPABASE_URL=https://qrwsqjztooxeziqfrmjx.supabase.co
+SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFyd3Nxanp0b294ZXppcWZybWp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUyNTY2MTEsImV4cCI6MjA4MDgzMjYxMX0.woX1RFTOnSN-JRdObGWsrvhCpLBNRcA4m7TTLUdvy0A
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here
+GREEN_API_ID_INSTANCE=7105416689
+GREEN_API_TOKEN=e7dfed4e95dc44ddbea1ca75c547c3a4ea8eb608929042ec86
+RESEND_API_KEY=re_xxxxx
+
+# ============================================
+# IMPORTANT UPDATES AFTER DEPLOYMENT:
+# ============================================
+#
+# 1. FRONTEND_URL:
+#    - After Railway gives you domain, update to: https://your-app.up.railway.app
+#    - After custom domain setup, update to: https://growmaxx.in
+#
+# 2. RAZORPAY_WEBHOOK_SECRET:
+#    - Go to Razorpay Dashboard → Settings → Webhooks
+#    - Create webhook: https://your-app.up.railway.app/api/webhook
+#    - Copy new webhook secret
+#    - Update in Railway
+#
+# 3. SUPABASE_SERVICE_ROLE_KEY:
+#    - Get from: Supabase Dashboard → Settings → API
+#    - Copy service_role key (not anon key)
+#    - Add to Railway
+#
+# ============================================
+
