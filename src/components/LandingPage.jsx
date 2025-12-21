@@ -1411,6 +1411,38 @@ function Footer() {
             </div>
           </div>
           
+          {/* Legal Links */}
+          <div>
+            <h4 className="font-semibold text-white text-sm mb-4">Legal</h4>
+            <ul className="space-y-2.5">
+              <li>
+                <Link to="/terms" className="text-neutral-500 text-sm hover:text-white transition-colors">
+                  Terms & Conditions
+                </Link>
+              </li>
+              <li>
+                <Link to="/privacy" className="text-neutral-500 text-sm hover:text-white transition-colors">
+                  Privacy Policy
+                </Link>
+              </li>
+              <li>
+                <Link to="/cancellation-refund" className="text-neutral-500 text-sm hover:text-white transition-colors">
+                  Cancellation & Refund
+                </Link>
+              </li>
+              <li>
+                <Link to="/shipping-exchange" className="text-neutral-500 text-sm hover:text-white transition-colors">
+                  Shipping & Exchange
+                </Link>
+              </li>
+              <li>
+                <Link to="/contact" className="text-neutral-500 text-sm hover:text-white transition-colors">
+                  Contact Us
+                </Link>
+              </li>
+            </ul>
+          </div>
+          
           {/* Quick Links */}
           <div>
             <h4 className="font-semibold text-white text-sm mb-4">Quick Links</h4>

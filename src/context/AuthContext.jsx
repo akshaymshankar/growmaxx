@@ -12,18 +12,27 @@ export function AuthProvider({ children }) {
   // Initialize auth state
   useEffect(() => {
     let mounted = true;
-    let loadingSet = false; // Track if we've already set loading to false
+    let loadingSet = false;
+    let authStateSubscription = null;
     
-    // Timeout fallback - ensure loading doesn't hang forever
+    // Timeout fallback - ALWAYS set loading to false after timeout
     const timeoutId = setTimeout(() => {
       if (mounted && !loadingSet) {
         console.warn('Auth loading timeout - proceeding anyway');
         setLoading(false);
         loadingSet = true;
       }
-    }, 2000); // 2 second timeout (faster)
+    }, 1000); // 1 second timeout - faster
     
-    // Get initial session - fast check for returning users
+    const setLoadComplete = () => {
+      if (mounted && !loadingSet) {
+        clearTimeout(timeoutId);
+        setLoading(false);
+        loadingSet = true;
+      }
+    };
+    
+    // Get initial session
     const checkSession = async () => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession();
@@ -32,116 +41,100 @@ export function AuthProvider({ children }) {
         
         if (error) {
           console.error('Session error:', error);
-          if (!loadingSet) {
-            clearTimeout(timeoutId);
-            setLoading(false);
-            loadingSet = true;
-          }
+          setLoadComplete();
           return;
         }
         
         if (session?.user) {
-          clearTimeout(timeoutId);
           setUser(session.user);
           
-          // Load profile in background - don't block loading
+          // Load profile in background - don't block
           loadProfile(session.user.id)
             .catch(err => {
               console.error('Profile load error:', err);
             })
             .finally(() => {
-              if (mounted && !loadingSet) {
-                setLoading(false);
-                loadingSet = true;
-              }
+              setLoadComplete();
             });
           return;
         }
         
-        // No session found
-        if (mounted && !loadingSet) {
-          clearTimeout(timeoutId);
-          setLoading(false);
-          loadingSet = true;
-        }
+        // No session
+        setLoadComplete();
       } catch (err) {
         console.error('Session fetch error:', err);
-        if (mounted && !loadingSet) {
-          clearTimeout(timeoutId);
-          setLoading(false);
-          loadingSet = true;
-        }
+        setLoadComplete();
       }
     };
     
+    // Start session check
     checkSession();
 
-    // Listen for auth changes (only for new sign-ins, not initial load)
-    let authChangeHandled = false;
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
+    // Listen for auth changes (for new sign-ins/sign-outs)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
       
-      // Skip initial SIGNED_IN event if we already handled session
-      if (event === 'SIGNED_IN' && authChangeHandled) {
-        return;
+      // Always ensure loading is false after auth state change
+      if (!loadingSet) {
+        setLoadComplete();
       }
       
-      clearTimeout(timeoutId);
-      authChangeHandled = true;
-      
+      // Handle auth state changes
       if (session?.user) {
-        setUser(session.user);
-        
-        // Load profile
-        loadProfile(session.user.id)
-          .catch(err => {
-            console.error('Profile load error:', err);
-          })
-          .finally(() => {
-            if (mounted && !loadingSet) {
-              setLoading(false);
-              loadingSet = true;
-            }
-          });
-        
-        // Create profile if it doesn't exist (only on new sign-in)
-        if (event === 'SIGNED_IN') {
-          const userId = session.user.id;
-          const userName = session.user.user_metadata?.name || 
-                          session.user.user_metadata?.full_name ||
-                          session.user.email?.split('@')[0] || 
-                          'User';
-          
-          try {
-            const { error } = await supabase
-              .from('profiles')
-              .insert({ id: userId, name: userName });
+        // Update user if different
+        setUser(prevUser => {
+          if (prevUser?.id !== session.user.id) {
+            // Load profile for new user
+            loadProfile(session.user.id)
+              .catch(err => {
+                console.error('Profile load error:', err);
+              });
             
-            // Ignore duplicate key errors (profile already exists)
-            if (error && error.code !== '23505') {
-              console.log('Profile creation note:', error.message);
+            // Create profile on new sign-in
+            if (event === 'SIGNED_IN') {
+              const userId = session.user.id;
+              const userName = session.user.user_metadata?.name || 
+                              session.user.user_metadata?.full_name ||
+                              session.user.email?.split('@')[0] || 
+                              'User';
+              
+              // Create profile asynchronously
+              (async () => {
+                try {
+                  const { error } = await supabase
+                    .from('profiles')
+                    .insert({ id: userId, name: userName });
+                  
+                  // Ignore duplicate errors
+                  if (error && error.code !== '23505') {
+                    console.log('Profile creation note:', error.message);
+                  }
+                } catch (err) {
+                  // Silently ignore - profile might already exist
+                  console.log('Profile creation skipped:', err);
+                }
+              })();
             }
-          } catch (err) {
-            // Silently ignore - profile might already exist
-            console.log('Profile creation skipped:', err);
+            
+            return session.user;
           }
-        }
+          return prevUser;
+        });
       } else {
+        // Signed out
         setUser(null);
         setProfile(null);
-        if (!loadingSet) {
-          setLoading(false);
-          loadingSet = true;
-        }
       }
     });
+    
+    authStateSubscription = subscription;
 
     return () => {
       mounted = false;
       clearTimeout(timeoutId);
-      subscription.unsubscribe();
+      if (authStateSubscription) {
+        authStateSubscription.unsubscribe();
+      }
     };
   }, []);
 
@@ -217,6 +210,26 @@ export function AuthProvider({ children }) {
       
       setUser(data.user);
       await loadProfile(data.user.id);
+
+      // Send welcome email on signup
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || (import.meta.env.PROD 
+          ? `${window.location.origin}/api/send-welcome-email`
+          : '/api/send-welcome-email');
+        
+        await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_email: email,
+            user_name: name || data.user.email?.split('@')[0] || 'Customer',
+          }),
+        });
+        console.log('✅ Welcome email sent to:', email);
+      } catch (emailError) {
+        console.error('Welcome email error (non-blocking):', emailError);
+        // Don't fail signup if email fails
+      }
     }
 
     return data;

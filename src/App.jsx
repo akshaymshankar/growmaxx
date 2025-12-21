@@ -11,6 +11,11 @@ import SelectPlan from "./pages/SelectPlan";
 import Payment from "./pages/Payment";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentCallback from "./pages/PaymentCallback";
+import Terms from "./pages/Terms";
+import Privacy from "./pages/Privacy";
+import CancellationRefund from "./pages/CancellationRefund";
+import ShippingExchange from "./pages/ShippingExchange";
+import ContactUs from "./pages/ContactUs";
 
 // Protected Route Component
 function ProtectedRoute({ children }) {
@@ -112,6 +117,13 @@ function AppRoutes() {
         path="/payment-callback" 
         element={<PaymentCallback />} 
       />
+      
+      {/* Legal Pages */}
+      <Route path="/terms" element={<Terms />} />
+      <Route path="/privacy" element={<Privacy />} />
+      <Route path="/cancellation-refund" element={<CancellationRefund />} />
+      <Route path="/shipping-exchange" element={<ShippingExchange />} />
+      <Route path="/contact" element={<ContactUs />} />
       
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />

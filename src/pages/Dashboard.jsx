@@ -22,7 +22,40 @@ export default function Dashboard() {
     loadDashboardData();
   }, [user, navigate]);
 
+  // Refresh data when coming from payment success
+  useEffect(() => {
+    if (location.state?.refresh) {
+      // Clear the refresh flag
+      window.history.replaceState({}, document.title);
+      // Refresh dashboard data
+      setTimeout(() => {
+        loadDashboardData();
+      }, 2000); // Wait for webhook to process
+    }
+  }, [location.state]);
+
+  // Refresh data when tab becomes visible (user returns after payment)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && user) {
+        // Refresh after a short delay to allow webhook processing
+        setTimeout(() => {
+          loadDashboardData();
+        }, 1000);
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [user]);
+
   const loadDashboardData = async () => {
+    if (!user) return;
+    
+    setLoading(true);
     try {
       // Load subscription (check for active or expired)
       const { data: subData, error: subError } = await supabase

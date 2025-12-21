@@ -17,7 +17,7 @@ export default function Payment() {
   const navigate = useNavigate();
   const { user, profile, selectedPlan, refreshSubscription } = useAuth();
   
-  const [paymentMethod, setPaymentMethod] = useState('upi');
+  const [paymentMethod, setPaymentMethod] = useState('card'); // 'upi' or 'card'
   const [autopay, setAutopay] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState('');
@@ -45,11 +45,11 @@ export default function Payment() {
   };
 
   const getTax = () => {
-    return Math.round(getPrice() * 0.18);
+    return 0; // No GST - GST not registered
   };
 
   const getTotal = () => {
-    return getPrice() + getTax();
+    return getPrice(); // No tax added
   };
 
   // Load Razorpay script
@@ -74,7 +74,7 @@ export default function Payment() {
       .insert({
         user_id: user.id,
         razorpay_order_id: razorpayOrderId,
-        amount: getTotal() * 100, // Store in paise
+        amount: getPrice() * 100, // Store in paise (no GST)
         currency: 'INR',
         status: 'pending',
         description: `${selectedPlan.name} Plan - ${selectedPlan.billingCycle}`,
@@ -104,7 +104,7 @@ export default function Payment() {
         user_id: user.id,
         plan_id: selectedPlan.id,
         plan_name: selectedPlan.name,
-        amount: getTotal() * 100,
+        amount: getPrice() * 100, // No GST
         billing_cycle: selectedPlan.billingCycle,
         status: 'active',
         auto_renew: autopay && selectedPlan.billingCycle !== 'onetime',
@@ -144,7 +144,7 @@ export default function Payment() {
         plan_id: selectedPlan.id,
         plan_name: selectedPlan.name,
         billing_cycle: selectedPlan.billingCycle,
-        amount: getTotal() * 100, // Store in paise
+        amount: getPrice() * 100, // Store in paise (no GST)
         currency: 'INR',
         status: 'pending',
         description: `${selectedPlan.name} Plan - ${selectedPlan.billingCycle === 'yearly' ? 'Yearly' : selectedPlan.billingCycle === 'onetime' ? 'One-time' : 'Monthly'}`,
@@ -174,11 +174,46 @@ export default function Payment() {
         // Continue anyway - we'll handle it in webhook
       }
 
-      const amount = getTotal();
+      const amount = getPrice(); // No GST
       
-      // If autopay is enabled and not one-time, use Razorpay Subscriptions (AUTOPAY)
-      if (autopay && selectedPlan.billingCycle !== 'onetime') {
-        console.log('🔄 Creating Razorpay Subscription with Autopay...');
+      console.log('💰 Payment amount:', {
+        plan: selectedPlan.name,
+        billingCycle: selectedPlan.billingCycle,
+        price: selectedPlan.price,
+        calculatedAmount: amount,
+        amountInPaise: amount * 100,
+      });
+      
+      // Validate amount
+      if (!amount || amount < 100) {
+        setError(`Invalid amount: ₹${amount}. Minimum amount is ₹100.`);
+        setIsProcessing(false);
+        return;
+      }
+      
+      // Payment method logic:
+      // - UPI: ALWAYS one-time payment (no subscription, even if autopay is enabled)
+      // - Card: Subscription with autopay (if autopay enabled and not one-time)
+      // - One-time plans: Always one-time payment
+      
+      // IMPORTANT: UPI should NEVER create subscriptions
+      const useSubscription = paymentMethod === 'card' && autopay && selectedPlan.billingCycle !== 'onetime' && paymentMethod !== 'upi';
+      
+      console.log('🔍 Payment method check:', {
+        paymentMethod,
+        autopay,
+        billingCycle: selectedPlan.billingCycle,
+        useSubscription,
+        willCreateSubscription: useSubscription,
+        willCreatePaymentLink: !useSubscription,
+      });
+      
+      // DOUBLE CHECK: Never create subscription for UPI
+      if (paymentMethod === 'upi') {
+        console.log('📱 UPI selected - forcing one-time payment (no subscription)');
+        // Force fall through to payment link creation
+      } else if (useSubscription) {
+        console.log('💳 Creating Razorpay Subscription with Card Autopay...');
         
         // Call API to create subscription
         const apiUrl = import.meta.env.VITE_API_URL || (import.meta.env.PROD 
@@ -203,6 +238,7 @@ export default function Payment() {
               user_email: user.email,
               user_name: profile?.name || profile?.full_name || '',
               user_phone: profile?.phone || '',
+              payment_intent_id: paymentData?.id, // Pass payment intent ID for webhook matching
             }),
             signal: controller.signal,
           });
@@ -217,13 +253,14 @@ export default function Payment() {
 
           const subData = await subResponse.json();
           
-          if (!subData || !subData.short_url) {
+          if (!subData || !subData.subscription_id) {
             console.error('❌ Invalid subscription response:', subData);
-            throw new Error('Invalid response from payment server.');
+            console.error('❌ Full response:', JSON.stringify(subData, null, 2));
+            throw new Error(subData?.error || subData?.message || 'Invalid response from payment server. Please try again.');
           }
 
           console.log('✅ Razorpay Subscription created:', subData.subscription_id);
-          console.log('🔗 Subscription URL:', subData.short_url);
+          console.log('📋 Full subscription data:', subData);
           
           // Store subscription info
           if (paymentData?.id) {
@@ -232,8 +269,68 @@ export default function Payment() {
             localStorage.setItem('subscription_id', subData.subscription_id);
           }
 
-          // Redirect to subscription authorization page (user will authorize autopay)
-          window.location.href = subData.short_url;
+          // Load Razorpay Checkout.js and open payment modal
+          const razorpayLoaded = await loadRazorpayScript();
+          if (!razorpayLoaded) {
+            throw new Error('Failed to load Razorpay checkout. Please refresh and try again.');
+          }
+
+          // Open Razorpay Checkout modal for subscription payment + mandate authorization
+          // IMPORTANT: For subscriptions, Razorpay will charge the full amount on first payment
+          // The ₹5 shown is just for authorization - actual charge will be full amount
+          console.log('💳 Opening Razorpay Checkout modal for subscription:', {
+            subscription_id: subData.subscription_id,
+            amount: amount,
+            amount_paise: amount * 100,
+          });
+
+          const razorpayOptions = {
+            key: RAZORPAY_KEY_ID,
+            subscription_id: subData.subscription_id,
+            name: 'GrowMaxx',
+            description: `${selectedPlan.name} Plan - ₹${amount} - ${selectedPlan.billingCycle === 'yearly' ? 'Yearly' : 'Monthly'} Subscription`,
+            image: '/logo.png', // Optional: your logo
+            prefill: {
+              name: profile?.name || profile?.full_name || user.email?.split('@')[0] || 'Customer',
+              email: user.email || '',
+              contact: profile?.phone || '',
+            },
+            notes: {
+              plan_id: selectedPlan.id,
+              plan_name: selectedPlan.name,
+              billing_cycle: selectedPlan.billingCycle,
+              user_id: user.id,
+              payment_intent_id: paymentData?.id,
+              full_amount: (amount * 100).toString(), // Store full amount in notes
+            },
+            theme: {
+              color: '#BFFF00', // Lime green matching your brand
+            },
+            handler: function (response) {
+              console.log('✅ Payment successful:', response);
+              console.log('💰 Full amount charged:', amount);
+              // Redirect to payment callback to verify
+              window.location.href = `/payment-callback?razorpay_payment_id=${response.razorpay_payment_id}&razorpay_subscription_id=${response.razorpay_subscription_id}&razorpay_signature=${response.razorpay_signature}&status=paid`;
+            },
+            modal: {
+              ondismiss: function() {
+                console.log('Payment modal closed');
+                setIsProcessing(false);
+                setError('Payment was cancelled. Please try again.');
+              }
+            }
+          };
+
+          try {
+            const razorpayInstance = new window.Razorpay(razorpayOptions);
+            console.log('🚀 Opening Razorpay Checkout modal...');
+            razorpayInstance.open();
+            setIsProcessing(false); // Reset processing state - modal is open
+          } catch (modalError) {
+            console.error('❌ Error opening Razorpay modal:', modalError);
+            setError('Failed to open payment modal. Please try again.');
+            setIsProcessing(false);
+          }
           return;
         } catch (subError) {
           clearTimeout(timeoutId);
@@ -243,8 +340,15 @@ export default function Payment() {
         }
       }
       
-      // Fallback: Use Payment Link (one-time payment or if subscription fails)
-      console.log('💳 Creating one-time Payment Link...');
+      // Use Payment Link for:
+      // 1. UPI payments (always one-time, no subscription)
+      // 2. One-time plans
+      // 3. If subscription creation failed
+      if (paymentMethod === 'upi') {
+        console.log('📱 Creating one-time Payment Link for UPI...');
+      } else {
+        console.log('💳 Creating one-time Payment Link...');
+      }
       
       // Call API to create payment link with preloaded amount
       const apiUrl = import.meta.env.VITE_API_URL || (import.meta.env.PROD 
@@ -270,6 +374,7 @@ export default function Payment() {
             user_email: user.email,
             user_name: profile?.name || profile?.full_name || '',
             user_phone: profile?.phone || '',
+            payment_intent_id: paymentData?.id, // Pass payment intent ID for webhook matching
           }),
           signal: controller.signal,
         });
@@ -279,15 +384,8 @@ export default function Payment() {
         if (!linkResponse.ok) {
           const errorText = await linkResponse.text();
           console.error('Payment link creation failed:', errorText);
-          // Fallback to base razorpay.me link if API fails
-          console.warn('API failed, using fallback razorpay.me link');
-          const fallbackLink = 'https://razorpay.me/@gandhiraajanakshaymuthushanka/';
-          if (paymentData?.id) {
-            localStorage.setItem('pending_payment_id', paymentData.id);
-            localStorage.setItem('pending_plan', JSON.stringify(selectedPlan));
-            localStorage.setItem('expected_amount', (amount * 100).toString());
-          }
-          window.location.href = fallbackLink;
+          setError('Failed to create payment link. Please try again or contact support.');
+          setIsProcessing(false);
           return;
         }
 
@@ -295,15 +393,8 @@ export default function Payment() {
         
         if (!linkData || !linkData.payment_link_url) {
           console.error('Invalid payment link response:', linkData);
-          // Fallback to base razorpay.me link
-          console.warn('Invalid response, using fallback razorpay.me link');
-          const fallbackLink = 'https://razorpay.me/@gandhiraajanakshaymuthushanka/';
-          if (paymentData?.id) {
-            localStorage.setItem('pending_payment_id', paymentData.id);
-            localStorage.setItem('pending_plan', JSON.stringify(selectedPlan));
-            localStorage.setItem('expected_amount', (amount * 100).toString());
-          }
-          window.location.href = fallbackLink;
+          setError('Invalid response from payment server. Please try again.');
+          setIsProcessing(false);
           return;
         }
 
@@ -321,18 +412,13 @@ export default function Payment() {
       } catch (fetchError) {
         clearTimeout(timeoutId);
         if (fetchError.name === 'AbortError') {
-          console.error('Payment link API timed out, using fallback');
+          console.error('Payment link API timed out');
+          setError('Payment server is taking too long. Please try again.');
         } else {
           console.error('Payment link API error:', fetchError);
+          setError('Failed to create payment link. Please try again.');
         }
-        // Fallback to base razorpay.me link if API fails
-        const fallbackLink = 'https://razorpay.me/@gandhiraajanakshaymuthushanka/';
-        if (paymentData?.id) {
-          localStorage.setItem('pending_payment_id', paymentData.id);
-          localStorage.setItem('pending_plan', JSON.stringify(selectedPlan));
-          localStorage.setItem('expected_amount', (amount * 100).toString());
-        }
-        window.location.href = fallbackLink;
+        setIsProcessing(false);
       }
       
     } catch (err) {
@@ -349,7 +435,7 @@ export default function Payment() {
 📋 Order Details:
 - Plan: ${selectedPlan.name}
 - Billing: ${selectedPlan.billingCycle === 'yearly' ? 'Yearly' : selectedPlan.billingCycle === 'onetime' ? 'One-time' : 'Monthly'}
-- Amount: ₹${getTotal().toLocaleString()}
+- Amount: ₹${getPrice().toLocaleString()}
 - Autopay: ${autopay ? 'Yes' : 'No'}
 
 👤 My Details:
@@ -433,21 +519,28 @@ Please share the payment link.`;
                 {/* Payment Method Tabs */}
                 <div className="flex border-b border-white/[0.04]">
                   {[
-                    { id: 'upi', label: 'UPI', icon: '📱' },
-                    { id: 'card', label: 'Card', icon: '💳' },
-                    { id: 'netbanking', label: 'Net Banking', icon: '🏦' },
+                    { id: 'upi', label: 'UPI', icon: '📱', desc: 'One-time' },
+                    { id: 'card', label: 'Card', icon: '💳', desc: 'Autopay' },
                   ].map((method) => (
                     <button
                       key={method.id}
-                      onClick={() => setPaymentMethod(method.id)}
+                      onClick={() => {
+                        setPaymentMethod(method.id);
+                        if (method.id === 'upi') {
+                          setAutopay(false); // UPI is always one-time
+                        }
+                      }}
                       className={`flex-1 py-4 px-4 text-center transition-colors ${
                         paymentMethod === method.id
                           ? 'bg-lime-400/10 text-lime-400 border-b-2 border-lime-400'
                           : 'text-neutral-400 hover:text-white'
                       }`}
                     >
-                      <span className="mr-2">{method.icon}</span>
-                      {method.label}
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="text-xl">{method.icon}</span>
+                        <span className="font-medium">{method.label}</span>
+                        <span className="text-xs opacity-75">{method.desc}</span>
+                      </div>
                     </button>
                   ))}
                 </div>
@@ -461,71 +554,97 @@ Please share the payment link.`;
                       {paymentMethod === 'netbanking' && '🏦'}
                     </div>
                     <p className="text-neutral-400 mb-2">
-                      Click "Pay Now" to open Razorpay
+                      {paymentMethod === 'upi' 
+                        ? 'Click "Pay Now" to open payment link'
+                        : paymentMethod === 'card' && autopay
+                          ? 'Click "Pay Now" to authorize autopay'
+                          : 'Click "Pay Now" to open payment'}
                     </p>
                     <p className="text-sm text-neutral-500">
-                      You'll be able to choose {paymentMethod === 'upi' ? 'GPay, PhonePe, Paytm' : paymentMethod === 'card' ? 'any Visa, Mastercard, RuPay card' : 'your bank'} in the payment window
+                      {paymentMethod === 'upi' 
+                        ? 'Pay with GPay, PhonePe, Paytm, or any UPI app'
+                        : paymentMethod === 'card'
+                          ? 'Use any Visa, Mastercard, or RuPay card'
+                          : 'Choose your preferred payment method'}
                     </p>
                   </div>
 
-                  {/* Netflix-Style Subscription Info */}
+                  {/* Payment Method Info */}
                   {selectedPlan.billingCycle !== 'onetime' && (
                     <div className="pt-6 border-t border-white/[0.04]">
-                      <div className="bg-lime-400/10 border border-lime-400/20 rounded-xl p-4 mb-4">
-                        <div className="flex items-start gap-3">
-                          <div className="text-2xl">🔄</div>
-                          <div className="flex-1">
-                            <div className="text-white font-semibold mb-1">
-                              {autopay ? 'Automatic Subscription' : 'One-Time Payment'}
-                            </div>
-                            {autopay ? (
-                              <>
-                                <div className="text-sm text-neutral-300 mb-2">
-                                  Your subscription will automatically renew every {selectedPlan.billingCycle === 'yearly' ? 'year' : 'month'}.
-                                </div>
-                                <div className="text-xs text-lime-400 space-y-1">
-                                  <div>✅ First payment charged today</div>
-                                  <div>✅ Auto-renews on {new Date(Date.now() + (selectedPlan.billingCycle === 'yearly' ? 365 : 30) * 24 * 60 * 60 * 1000).toLocaleDateString()}</div>
-                                  <div>✅ Cancel anytime from your dashboard</div>
-                                  <div className="font-semibold mt-2">💳 Payment Methods:</div>
-                                  <div>• UPI Autopay - Set up mandate in GPay/PhonePe</div>
-                                  <div>• Card Autopay - Authorize once, auto-debit monthly</div>
-                                  <div className="text-neutral-300 mt-2 text-[10px]">
-                                    You'll authorize automatic debits during payment setup
-                                  </div>
-                                </div>
-                              </>
-                            ) : (
-                              <div className="text-sm text-neutral-300">
-                                You'll need to manually pay each {selectedPlan.billingCycle === 'yearly' ? 'year' : 'month'} to continue service.
+                      {paymentMethod === 'upi' ? (
+                        <div className="bg-blue-400/10 border border-blue-400/20 rounded-xl p-4 mb-4">
+                          <div className="flex items-start gap-3">
+                            <div className="text-2xl">📱</div>
+                            <div className="flex-1">
+                              <div className="text-white font-semibold mb-1">UPI Payment (One-Time)</div>
+                              <div className="text-sm text-neutral-300 mb-2">
+                                UPI payments are one-time only. You'll need to pay manually each {selectedPlan.billingCycle === 'yearly' ? 'year' : 'month'}.
                               </div>
-                            )}
+                              <div className="text-xs text-blue-400 space-y-1">
+                                <div>✅ Pay with GPay, PhonePe, Paytm, or any UPI app</div>
+                                <div>✅ Instant payment confirmation</div>
+                                <div>⚠️ No autopay - manual payment required each cycle</div>
+                              </div>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="text-white font-medium">Enable Auto-Renewal</div>
-                          <div className="text-sm text-neutral-500">
-                            {autopay 
-                              ? 'Automatic billing enabled - like Netflix'
-                              : 'Manual payment required each billing cycle'}
+                      ) : (
+                        <>
+                          <div className="bg-lime-400/10 border border-lime-400/20 rounded-xl p-4 mb-4">
+                            <div className="flex items-start gap-3">
+                              <div className="text-2xl">💳</div>
+                              <div className="flex-1">
+                                <div className="text-white font-semibold mb-1">
+                                  {autopay ? 'Card Autopay Enabled' : 'Card Payment (One-Time)'}
+                                </div>
+                                {autopay ? (
+                                  <>
+                                    <div className="text-sm text-neutral-300 mb-2">
+                                      Your subscription will automatically renew every {selectedPlan.billingCycle === 'yearly' ? 'year' : 'month'} using your card.
+                                    </div>
+                                    <div className="text-xs text-lime-400 space-y-1">
+                                      <div>✅ First payment charged today</div>
+                                      <div>✅ Auto-renews on {new Date(Date.now() + (selectedPlan.billingCycle === 'yearly' ? 365 : 30) * 24 * 60 * 60 * 1000).toLocaleDateString()}</div>
+                                      <div>✅ Cancel anytime from your dashboard</div>
+                                      <div className="text-neutral-300 mt-2 text-[10px]">
+                                        You'll authorize automatic debits during payment setup
+                                      </div>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div className="text-sm text-neutral-300">
+                                    You'll need to manually pay each {selectedPlan.billingCycle === 'yearly' ? 'year' : 'month'} to continue service.
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                        <button
-                          onClick={() => setAutopay(!autopay)}
-                          className={`relative w-14 h-8 rounded-full transition-colors ${
-                            autopay ? 'bg-lime-400' : 'bg-neutral-700'
-                          }`}
-                        >
-                          <motion.div
-                            className="absolute top-1 w-6 h-6 bg-white rounded-full shadow"
-                            animate={{ left: autopay ? '30px' : '4px' }}
-                            transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                          />
-                        </button>
-                      </div>
+                          
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="text-white font-medium">Enable Auto-Renewal</div>
+                              <div className="text-sm text-neutral-500">
+                                {autopay 
+                                  ? 'Automatic billing enabled - like Netflix'
+                                  : 'Manual payment required each billing cycle'}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => setAutopay(!autopay)}
+                              className={`relative w-14 h-8 rounded-full transition-colors ${
+                                autopay ? 'bg-lime-400' : 'bg-neutral-700'
+                              }`}
+                            >
+                              <motion.div
+                                className="absolute top-1 w-6 h-6 bg-white rounded-full shadow"
+                                animate={{ left: autopay ? '30px' : '4px' }}
+                                transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                              />
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -577,18 +696,10 @@ Please share the payment link.`;
 
                 {/* Price Breakdown */}
                 <div className="space-y-3 mb-6">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-neutral-400">Subtotal</span>
-                    <span className="text-white">₹{getPrice().toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-neutral-400">GST (18%)</span>
-                    <span className="text-white">₹{getTax().toLocaleString()}</span>
-                  </div>
                   <div className="border-t border-white/[0.04] pt-3 flex justify-between">
                     <span className="font-medium text-white">Total</span>
                     <span className="font-display text-xl font-bold text-lime-400">
-                      ₹{getTotal().toLocaleString()}
+                      ₹{getPrice().toLocaleString()}
                     </span>
                   </div>
                 </div>
@@ -608,7 +719,7 @@ Please share the payment link.`;
                       Redirecting...
                     </span>
                   ) : (
-                    `Pay ₹${getTotal().toLocaleString()}`
+                    `Pay ₹${getPrice().toLocaleString()}`
                   )}
                 </button>
 

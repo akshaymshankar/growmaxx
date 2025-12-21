@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
 
 // Contact details
 const CONTACT = {
@@ -11,8 +13,10 @@ const CONTACT = {
 export default function PaymentSuccess() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { paymentId, plan } = location.state || {};
+  const { user } = useAuth();
+  const { paymentId, plan, refresh } = location.state || {};
   const [showConfetti, setShowConfetti] = useState(true);
+  const [subscription, setSubscription] = useState(null);
 
   // Simple confetti effect using CSS
   useEffect(() => {
@@ -20,13 +24,39 @@ export default function PaymentSuccess() {
     return () => clearTimeout(timer);
   }, []);
 
+  // Refresh subscription data if payment was just completed
+  useEffect(() => {
+    if (refresh && user) {
+      const refreshSubscription = async () => {
+        // Wait a moment for webhook to process
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Fetch latest subscription
+        const { data: subData } = await supabase
+          .from('subscriptions')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        if (subData) {
+          setSubscription(subData);
+          console.log('✅ Subscription refreshed:', subData);
+        }
+      };
+      
+      refreshSubscription();
+    }
+  }, [refresh, user]);
+
   // Redirect if accessed directly without payment data
   useEffect(() => {
-    if (!plan && !paymentId) {
+    if (!plan && !paymentId && !subscription) {
       const timer = setTimeout(() => navigate('/dashboard'), 5000);
       return () => clearTimeout(timer);
     }
-  }, [plan, paymentId, navigate]);
+  }, [plan, paymentId, subscription, navigate]);
 
   return (
     <div className="min-h-screen bg-[#050505] flex items-center justify-center p-6 relative overflow-hidden">
@@ -154,6 +184,7 @@ export default function PaymentSuccess() {
             </a>
             <Link
               to="/dashboard"
+              state={{ refresh: true }}
               className="flex items-center justify-center gap-2 px-8 py-4 border border-white/10 text-white rounded-xl font-medium hover:bg-white/5 transition-colors"
             >
               Go to Dashboard
